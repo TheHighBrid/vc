@@ -1,0 +1,16 @@
+# Copy this file to `local.properties` and fill in your values.
+# `local.properties` is git-ignored, so your keys never get committed.
+
+# --- Android SDK (Android Studio fills this in automatically) ---
+# sdk.dir=/Users/you/Library/Android/sdk
+
+# --- ElevenLabs Conversational AI ---
+# Required: the agent that speaks in Kenza's cloned voice.
+ELEVENLABS_AGENT_ID=
+
+# Required only if the agent is PRIVATE (auth enabled). For a public agent,
+# leave this blank. Never ship a real key in a production app.
+ELEVENLABS_API_KEY=
+
+# Optional: name shown on the call screen (defaults to "Kenza").
+CONTACT_NAME=Kenza

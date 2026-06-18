@@ -9,3 +9,6 @@
 .cxx
 local.properties
 app/build/
+
+# Built APKs / outputs
+*.apk

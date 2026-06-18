@@ -26,6 +26,7 @@ android {
         // Pulled from local.properties (see README). Empty by default.
         buildConfigField("String", "ELEVENLABS_AGENT_ID", "\"${secret("ELEVENLABS_AGENT_ID")}\"")
         buildConfigField("String", "ELEVENLABS_API_KEY", "\"${secret("ELEVENLABS_API_KEY")}\"")
+        buildConfigField("String", "ELEVENLABS_VOICE_ID", "\"${secret("ELEVENLABS_VOICE_ID")}\"")
         buildConfigField("String", "CONTACT_NAME", "\"${secret("CONTACT_NAME").ifEmpty { "Kenza" }}\"")
     }
 

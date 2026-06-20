@@ -40,7 +40,7 @@ class ConversationalAiClient(
         fun onUserTranscript(text: String)
         fun onAgentText(text: String)
         fun onInterruption()
-        fun onClosed()
+        fun onClosed(reason: String)
         fun onError(message: String)
     }
 
@@ -98,9 +98,10 @@ class ConversationalAiClient(
         socket = http.newWebSocket(req, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 Log.i(TAG, "socket open")
-                // Kick off the conversation. Overrides are intentionally omitted
-                // so this works even when the agent disallows client overrides.
-                webSocket.send("""{"type":"conversation_initiation_client_data"}""")
+                // No init message is sent: the agent auto-starts the conversation
+                // and streams its metadata. Sending an empty/partial
+                // conversation_initiation_client_data makes the server drop the
+                // socket, which previously ended the call after ~1 second.
                 listener.onConnected()
             }
 
@@ -114,12 +115,13 @@ class ConversationalAiClient(
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 Log.i(TAG, "socket closed $code $reason")
-                if (!closedByUser) listener.onClosed()
+                if (!closedByUser) listener.onClosed("closed ($code${if (reason.isNotBlank()) " $reason" else ""})")
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 Log.e(TAG, "socket failure", t)
-                if (!closedByUser) listener.onError(t.message ?: "connection failed")
+                val detail = response?.let { "HTTP ${it.code}" } ?: t.message ?: "connection failed"
+                if (!closedByUser) listener.onError(detail)
             }
         })
     }

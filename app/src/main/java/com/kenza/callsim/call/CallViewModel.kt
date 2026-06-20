@@ -144,8 +144,8 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
                 player?.flush()
                 _state.update { it.copy(activity = AgentActivity.LISTENING) }
             }
-            override fun onClosed() = postError("Call disconnected.")
-            override fun onError(message: String) = postError(message)
+            override fun onClosed(reason: String) = postError("Disconnected: $reason")
+            override fun onError(message: String) = postError("Connection error: $message")
         })
         client = ai
         ai.start()

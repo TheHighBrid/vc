@@ -42,6 +42,15 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
     private var speakingResetJob: Job? = null
     private var pendingStartAfterPermission = false
 
+    // Auto-reconnect: when the server ends a session (e.g. its max-duration
+    // limit) we transparently re-establish the call instead of dropping it. The
+    // attempt counter resets on every successful (re)connect, so unlimited
+    // healthy reconnects are allowed while a genuinely broken setup still stops.
+    private var userEnded = false
+    private var reconnectAttempts = 0
+    private val maxConsecutiveReconnects = 6
+    private var sessionStartTime = 0L
+
     // ---- Incoming / outgoing flow -------------------------------------------
 
     fun simulateIncomingCall() {
@@ -70,6 +79,8 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun beginConnecting() {
+        userEnded = false
+        reconnectAttempts = 0
         _state.update { it.copy(phase = CallPhase.CONNECTING) }
         if (!config.isConfigured) {
             // Pure UI demo — show the live call screen without needing the mic.
@@ -132,6 +143,7 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
                 _state.update { it.copy(phase = CallPhase.CONNECTING) }
             }
             override fun onReady(sampleRate: Int) {
+                sessionStartTime = System.currentTimeMillis()
                 // Now we know the agent's audio rate — open the player to match,
                 // then start streaming the mic and go live.
                 if (player == null) {
@@ -140,7 +152,7 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
                 if (mic == null) {
                     mic = MicRecorder(
                         onChunk = { chunk -> client?.sendAudio(chunk) },
-                        onError = { msg -> postError("Microphone: $msg") },
+                        onError = { msg -> handleDisconnect("Microphone: $msg") },
                         onStreaming = { _state.update { it.copy(micStreaming = true) } }
                     ).also { it.start() }
                 }
@@ -160,8 +172,8 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
                 player?.flush()
                 _state.update { it.copy(activity = AgentActivity.LISTENING) }
             }
-            override fun onClosed(reason: String) = postError("Disconnected: $reason")
-            override fun onError(message: String) = postError("Connection error: $message")
+            override fun onClosed(reason: String) = handleDisconnect("Disconnected: $reason")
+            override fun onError(message: String) = handleDisconnect("Connection error: $message")
         })
         client = ai
         ai.start()
@@ -189,10 +201,37 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private fun postError(message: String) {
+    /**
+     * Called when the voice session drops. If the user is still on the call and
+     * the failure isn't fatal, transparently reconnect so a server-side
+     * conversation-duration limit (or a network blip) doesn't end the call.
+     */
+    private fun handleDisconnect(message: String) {
         viewModelScope.launch {
-            _state.update { it.copy(errorMessage = message) }
-            endCall()
+            if (userEnded) return@launch
+            val phase = _state.value.phase
+            val onCall = phase == CallPhase.ACTIVE || phase == CallPhase.CONNECTING
+            val fatal = message.contains("HTTP 4") || message.contains("Microphone")
+
+            // A session that lasted a while was healthy; refresh the budget so a
+            // periodic max-duration close can reconnect indefinitely, while a
+            // rapid-fail loop (never staying up) still exhausts the attempts.
+            if (System.currentTimeMillis() - sessionStartTime > 15_000) reconnectAttempts = 0
+
+            if (onCall && !fatal && reconnectAttempts < maxConsecutiveReconnects) {
+                reconnectAttempts++
+                // Tear down the old session (suppresses its further callbacks)
+                // and immediately bring up a fresh one. The call stays alive.
+                stopVoiceSession()
+                _state.update {
+                    it.copy(phase = CallPhase.CONNECTING, micStreaming = false, activity = AgentActivity.THINKING)
+                }
+                delay(600)
+                if (!userEnded) startVoiceSession()
+            } else {
+                _state.update { it.copy(errorMessage = message) }
+                finishCall(null)
+            }
         }
     }
 
@@ -228,13 +267,20 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---- End / cleanup -------------------------------------------------------
 
+    /** User hung up — stop for good (no auto-reconnect). */
     fun endCall() {
+        userEnded = true
+        finishCall(null)
+    }
+
+    private fun finishCall(error: String?) {
         stopVoiceSession()
         ringtone.stop()
         timerJob?.cancel()
         _state.update {
             it.copy(
                 phase = CallPhase.ENDED,
+                errorMessage = error ?: it.errorMessage,
                 isMuted = false,
                 isSpeakerOn = false,
                 isKeypadVisible = false,

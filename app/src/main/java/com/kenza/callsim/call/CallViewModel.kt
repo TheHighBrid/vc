@@ -123,7 +123,6 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
         }
 
         configureAudioRouting()
-        player = PcmPlayer().also { it.start() }
 
         val ai = ConversationalAiClient(
             agentId = config.agentId,
@@ -132,8 +131,12 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
             override fun onConnected() {
                 _state.update { it.copy(phase = CallPhase.CONNECTING) }
             }
-            override fun onReady() {
-                // Agent acknowledged; start streaming the mic and go live.
+            override fun onReady(sampleRate: Int) {
+                // Now we know the agent's audio rate — open the player to match,
+                // then start streaming the mic and go live.
+                if (player == null) {
+                    player = PcmPlayer(sampleRate).also { it.start() }
+                }
                 if (mic == null) {
                     mic = MicRecorder(
                         onChunk = { chunk -> client?.sendAudio(chunk) },

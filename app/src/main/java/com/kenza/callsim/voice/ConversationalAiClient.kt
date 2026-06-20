@@ -36,8 +36,12 @@ class ConversationalAiClient(
 
     interface Listener {
         fun onConnected()
-        /** Fired when the agent sends conversation_initiation_metadata — safe to stream mic audio now. */
-        fun onReady()
+        /**
+         * Fired when the agent sends conversation_initiation_metadata. [sampleRate]
+         * is the agent's output rate (Hz); audio delivered to onAgentAudio is
+         * already normalized to signed 16-bit little-endian PCM at this rate.
+         */
+        fun onReady(sampleRate: Int)
         fun onAgentAudio(pcm: ByteArray)
         fun onUserTranscript(text: String)
         fun onAgentText(text: String)
@@ -62,6 +66,7 @@ class ConversationalAiClient(
 
     @Volatile private var socket: WebSocket? = null
     @Volatile private var closedByUser = false
+    @Volatile private var outputIsMulaw = false
 
     fun start() {
         closedByUser = false
@@ -130,12 +135,21 @@ class ConversationalAiClient(
     private fun handle(webSocket: WebSocket, text: String) {
         val json = runCatching { JSONObject(text) }.getOrNull() ?: return
         when (json.optString("type")) {
-            "conversation_initiation_metadata" -> listener.onReady()
+            "conversation_initiation_metadata" -> {
+                val fmt = json.optJSONObject("conversation_initiation_metadata_event")
+                    ?.optString("agent_output_audio_format").orEmpty()
+                outputIsMulaw = fmt.startsWith("ulaw", ignoreCase = true)
+                val sampleRate = parseSampleRate(fmt)
+                Log.i(TAG, "agent output format=$fmt -> rate=$sampleRate mulaw=$outputIsMulaw")
+                listener.onReady(sampleRate)
+            }
             "audio" -> {
                 val b64 = json.optJSONObject("audio_event")?.optString("audio_base_64").orEmpty()
                 if (b64.isNotEmpty()) {
-                    runCatching { Base64.decode(b64, Base64.DEFAULT) }
-                        .getOrNull()?.let(listener::onAgentAudio)
+                    runCatching { Base64.decode(b64, Base64.DEFAULT) }.getOrNull()?.let { raw ->
+                        val pcm = if (outputIsMulaw) ulawToPcm16(raw) else raw
+                        listener.onAgentAudio(pcm)
+                    }
                 }
             }
             "user_transcript" -> {
@@ -169,5 +183,29 @@ class ConversationalAiClient(
         closedByUser = true
         runCatching { socket?.close(1000, "bye") }
         socket = null
+    }
+
+    /** Format strings look like "pcm_16000", "pcm_24000", "ulaw_8000". */
+    private fun parseSampleRate(format: String): Int =
+        format.substringAfterLast('_').toIntOrNull() ?: 16_000
+
+    /**
+     * Decode 8-bit G.711 µ-law to signed 16-bit little-endian PCM. ElevenLabs
+     * uses this for the "ulaw_8000" output format; AudioTrack only plays PCM.
+     */
+    private fun ulawToPcm16(ulaw: ByteArray): ByteArray {
+        val bias = 0x84
+        val out = ByteArray(ulaw.size * 2)
+        for (i in ulaw.indices) {
+            val u = ulaw[i].toInt().inv() and 0xFF
+            val exponent = (u shr 4) and 0x07
+            val mantissa = u and 0x0F
+            var sample = ((mantissa shl 3) + bias) shl exponent
+            sample -= bias
+            if (u and 0x80 != 0) sample = -sample
+            out[i * 2] = (sample and 0xFF).toByte()
+            out[i * 2 + 1] = ((sample shr 8) and 0xFF).toByte()
+        }
+        return out
     }
 }

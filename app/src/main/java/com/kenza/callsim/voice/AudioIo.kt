@@ -110,14 +110,14 @@ class MicRecorder(
  * Streams raw PCM coming back from the agent to the speaker/earpiece.
  * [flush] is used on interruptions so the agent stops mid-sentence instantly.
  */
-class PcmPlayer {
+class PcmPlayer(private val sampleRate: Int = AudioConfig.SAMPLE_RATE) {
 
     private var track: AudioTrack? = null
 
     fun start() {
         if (track != null) return
         val minBuf = AudioTrack.getMinBufferSize(
-            AudioConfig.SAMPLE_RATE, AudioConfig.CHANNEL_OUT, AudioConfig.ENCODING
+            sampleRate, AudioConfig.CHANNEL_OUT, AudioConfig.ENCODING
         )
         track = AudioTrack.Builder()
             .setAudioAttributes(
@@ -128,12 +128,12 @@ class PcmPlayer {
             )
             .setAudioFormat(
                 AudioFormat.Builder()
-                    .setSampleRate(AudioConfig.SAMPLE_RATE)
+                    .setSampleRate(sampleRate)
                     .setChannelMask(AudioConfig.CHANNEL_OUT)
                     .setEncoding(AudioConfig.ENCODING)
                     .build()
             )
-            .setBufferSizeInBytes(maxOf(minBuf, AudioConfig.SAMPLE_RATE))
+            .setBufferSizeInBytes(maxOf(minBuf, sampleRate))
             .setTransferMode(AudioTrack.MODE_STREAM)
             .build()
         track?.play()

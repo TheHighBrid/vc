@@ -20,5 +20,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "KenzaCall"
+rootProject.name = "Melato"
 include(":app")

@@ -5,7 +5,6 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
-// Read secrets from local.properties so API keys never get committed.
 val localProps = Properties().apply {
     val f = rootProject.file("local.properties")
     if (f.exists()) f.inputStream().use { load(it) }
@@ -13,20 +12,18 @@ val localProps = Properties().apply {
 fun secret(key: String): String = (localProps.getProperty(key) ?: "").trim()
 
 android {
-    namespace = "com.kenza.callsim"
+    namespace = "com.melato.shop"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.kenza.callsim"
+        applicationId = "com.melato.shop"
         minSdk = 26
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
 
-        // Pulled from local.properties (see README). Empty by default.
-        buildConfigField("String", "ELEVENLABS_AGENT_ID", "\"${secret("ELEVENLABS_AGENT_ID")}\"")
-        buildConfigField("String", "ELEVENLABS_API_KEY", "\"${secret("ELEVENLABS_API_KEY")}\"")
-        buildConfigField("String", "CONTACT_NAME", "\"${secret("CONTACT_NAME").ifEmpty { "Kenza" }}\"")
+        buildConfigField("String", "SHOPIFY_STORE_DOMAIN", "\"${secret("SHOPIFY_STORE_DOMAIN").ifEmpty { "melato.ca" }}\"")
+        buildConfigField("String", "SHOPIFY_STOREFRONT_TOKEN", "\"${secret("SHOPIFY_STOREFRONT_TOKEN")}\"")
     }
 
     buildTypes {
@@ -76,6 +73,10 @@ dependencies {
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.compose.material3:material3")
+
+    implementation("androidx.navigation:navigation-compose:2.8.4")
+
+    implementation("io.coil-kt:coil-compose:2.7.0")
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")

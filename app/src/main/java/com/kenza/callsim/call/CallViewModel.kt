@@ -6,9 +6,13 @@ import android.media.AudioManager
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.kenza.callsim.config.ConfigRepository
-import com.kenza.callsim.voice.ConversationalAiClient
+import com.kenza.callsim.config.ProviderType
+import com.kenza.callsim.config.SettingsData
+import com.kenza.callsim.voice.ElevenLabsProvider
+import com.kenza.callsim.voice.GeminiLiveProvider
 import com.kenza.callsim.voice.MicRecorder
 import com.kenza.callsim.voice.PcmPlayer
+import com.kenza.callsim.voice.VoiceProvider
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -34,7 +38,7 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
     private val ringtone = RingtonePlayer(app)
     private val dtmf = DtmfTones()
 
-    private var client: ConversationalAiClient? = null
+    private var client: VoiceProvider? = null
     private var mic: MicRecorder? = null
     private var player: PcmPlayer? = null
 
@@ -42,14 +46,16 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
     private var speakingResetJob: Job? = null
     private var pendingStartAfterPermission = false
 
-    // Auto-reconnect: when the server ends a session (e.g. its max-duration
-    // limit) we transparently re-establish the call instead of dropping it. The
-    // attempt counter resets on every successful (re)connect, so unlimited
-    // healthy reconnects are allowed while a genuinely broken setup still stops.
+    // Auto-reconnect: when a provider ends a session (e.g. a server-side
+    // conversation-duration limit) we transparently re-establish the call. To
+    // avoid replay loops (e.g. ElevenLabs out of quota replaying its greeting),
+    // the retry budget only refreshes once the user has actually spoken — proof
+    // of a real two-way call rather than a failing reconnect cycle. Fatal causes
+    // (out of quota, bad key, mic failure) never reconnect.
     private var userEnded = false
     private var reconnectAttempts = 0
-    private val maxConsecutiveReconnects = 6
-    private var sessionStartTime = 0L
+    private val maxConsecutiveReconnects = 4
+    private var hadUserInteraction = false
 
     // ---- Incoming / outgoing flow -------------------------------------------
 
@@ -81,6 +87,7 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
     private fun beginConnecting() {
         userEnded = false
         reconnectAttempts = 0
+        hadUserInteraction = false
         _state.update { it.copy(phase = CallPhase.CONNECTING) }
         if (!config.isConfigured) {
             // Pure UI demo — show the live call screen without needing the mic.
@@ -135,24 +142,20 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
 
         configureAudioRouting()
 
-        val ai = ConversationalAiClient(
-            agentId = config.agentId,
-            apiKey = config.apiKey,
-            listener = object : ConversationalAiClient.Listener {
+        val ai = buildProvider(object : VoiceProvider.Listener {
             override fun onConnected() {
                 _state.update { it.copy(phase = CallPhase.CONNECTING) }
             }
-            override fun onReady(sampleRate: Int) {
-                sessionStartTime = System.currentTimeMillis()
+            override fun onReady(outputSampleRate: Int) {
                 // Now we know the agent's audio rate — open the player to match,
                 // then start streaming the mic and go live.
                 if (player == null) {
-                    player = PcmPlayer(sampleRate).also { it.start() }
+                    player = PcmPlayer(outputSampleRate).also { it.start() }
                 }
                 if (mic == null) {
                     mic = MicRecorder(
                         onChunk = { chunk -> client?.sendAudio(chunk) },
-                        onError = { msg -> handleDisconnect("Microphone: $msg") },
+                        onError = { msg -> handleDisconnect("Microphone: $msg", fatal = true) },
                         onStreaming = { _state.update { it.copy(micStreaming = true) } }
                     ).also { it.start() }
                 }
@@ -162,22 +165,40 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
                 player?.write(pcm)
                 markSpeaking()
             }
-            override fun onUserTranscript(text: String) {
+            override fun onUserText(text: String) {
+                // Real two-way interaction — a genuine call, so allow further reconnects.
+                hadUserInteraction = true
                 _state.update { it.copy(lastUserText = text, activity = AgentActivity.THINKING) }
             }
             override fun onAgentText(text: String) {
                 _state.update { it.copy(lastAgentText = text) }
             }
-            override fun onInterruption() {
+            override fun onInterrupted() {
                 player?.flush()
                 _state.update { it.copy(activity = AgentActivity.LISTENING) }
             }
-            override fun onClosed(reason: String) = handleDisconnect("Disconnected: $reason")
-            override fun onError(message: String) = handleDisconnect("Connection error: $message")
+            override fun onClosed(reason: String, fatal: Boolean) =
+                handleDisconnect("Disconnected: $reason", fatal)
         })
         client = ai
         ai.start()
     }
+
+    private fun buildProvider(listener: VoiceProvider.Listener): VoiceProvider =
+        when (config.provider) {
+            ProviderType.GEMINI -> GeminiLiveProvider(
+                apiKey = config.geminiApiKey,
+                model = config.geminiModel,
+                voiceName = config.geminiVoice,
+                systemPrompt = config.personaPrompt,
+                listener = listener,
+            )
+            ProviderType.ELEVENLABS -> ElevenLabsProvider(
+                agentId = config.agentId,
+                apiKey = config.apiKey,
+                listener = listener,
+            )
+        }
 
     private fun onSessionActive(demo: Boolean) {
         _state.update {
@@ -206,33 +227,45 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
      * the failure isn't fatal, transparently reconnect so a server-side
      * conversation-duration limit (or a network blip) doesn't end the call.
      */
-    private fun handleDisconnect(message: String) {
+    private fun handleDisconnect(message: String, fatal: Boolean) {
         viewModelScope.launch {
             if (userEnded) return@launch
             val phase = _state.value.phase
             val onCall = phase == CallPhase.ACTIVE || phase == CallPhase.CONNECTING
-            val fatal = message.contains("HTTP 4") || message.contains("Microphone")
 
-            // A session that lasted a while was healthy; refresh the budget so a
-            // periodic max-duration close can reconnect indefinitely, while a
-            // rapid-fail loop (never staying up) still exhausts the attempts.
-            if (System.currentTimeMillis() - sessionStartTime > 15_000) reconnectAttempts = 0
+            // Only a session with real two-way interaction refreshes the retry
+            // budget. This lets a genuine long call reconnect indefinitely past a
+            // server duration limit, while a quota/greeting replay loop (user
+            // never gets to speak) exhausts the budget and stops.
+            if (hadUserInteraction) {
+                reconnectAttempts = 0
+                hadUserInteraction = false
+            }
 
             if (onCall && !fatal && reconnectAttempts < maxConsecutiveReconnects) {
                 reconnectAttempts++
-                // Tear down the old session (suppresses its further callbacks)
-                // and immediately bring up a fresh one. The call stays alive.
                 stopVoiceSession()
                 _state.update {
                     it.copy(phase = CallPhase.CONNECTING, micStreaming = false, activity = AgentActivity.THINKING)
                 }
-                delay(600)
+                delay(700)
                 if (!userEnded) startVoiceSession()
             } else {
-                _state.update { it.copy(errorMessage = message) }
+                _state.update { it.copy(errorMessage = friendlyError(message, fatal)) }
                 finishCall(null)
             }
         }
+    }
+
+    private fun friendlyError(message: String, fatal: Boolean): String = when {
+        message.contains("quota", true) || message.contains("RESOURCE_EXHAUSTED", true) ||
+            message.contains("credit", true) || message.contains("limit", true) ->
+            "Out of provider quota/credits. Switch voice provider in Settings, or top up your plan."
+        message.contains("API key", true) || message.contains("Agent ID", true) ||
+            message.contains("401") || message.contains("403") || message.contains("UNAUTHENTICATED", true) ->
+            "Authentication failed. Check your key/ID in Settings.\n($message)"
+        fatal -> message
+        else -> message
     }
 
     // ---- In-call controls ----------------------------------------------------
@@ -311,13 +344,26 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---- Settings / consent --------------------------------------------------
 
-    fun currentSettings(): Triple<String, String, String> =
-        Triple(config.agentId, config.apiKey, config.contactName)
+    fun currentSettings() = SettingsData(
+        provider = config.provider,
+        geminiApiKey = config.geminiApiKey,
+        geminiVoice = config.geminiVoice,
+        geminiModel = config.geminiModel,
+        agentId = config.agentId,
+        elevenApiKey = config.apiKey,
+        contactName = config.contactName,
+        persona = config.personaPrompt,
+    )
 
-    fun saveSettings(agentId: String, apiKey: String, contactName: String) {
-        config.agentId = agentId
-        config.apiKey = apiKey
-        config.contactName = contactName
+    fun saveSettings(s: SettingsData) {
+        config.provider = s.provider
+        config.geminiApiKey = s.geminiApiKey
+        config.geminiVoice = s.geminiVoice
+        config.geminiModel = s.geminiModel
+        config.agentId = s.agentId
+        config.apiKey = s.elevenApiKey
+        config.contactName = s.contactName
+        config.personaPrompt = s.persona
         _state.update {
             it.copy(contactName = config.contactName, isConfigured = config.isConfigured)
         }

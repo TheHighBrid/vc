@@ -82,9 +82,10 @@ fun HomeScreen(
 
         if (!state.isConfigured) {
             Text(
-                text = "Demo mode — add ELEVENLABS_AGENT_ID in local.properties for live voice",
+                text = "Demo mode — tap ⚙ Settings to add a free Gemini key (or ElevenLabs) for live voice",
                 color = IOSColors.SecondaryLabel,
                 fontSize = 12.sp,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 modifier = Modifier.padding(bottom = 4.dp)
             )
         }

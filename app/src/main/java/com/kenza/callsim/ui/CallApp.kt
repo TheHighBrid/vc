@@ -38,11 +38,8 @@ fun CallApp(
     }
 
     if (showSettings) {
-        val (agentId, apiKey, contactName) = viewModel.currentSettings()
         SettingsScreen(
-            initialAgentId = agentId,
-            initialApiKey = apiKey,
-            initialContactName = contactName,
+            initial = viewModel.currentSettings(),
             voiceId = viewModel.voiceId(),
             onSave = viewModel::saveSettings,
             onBack = { showSettings = false }

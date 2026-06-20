@@ -2,7 +2,6 @@ package com.kenza.callsim.voice
 
 import android.util.Base64
 import android.util.Log
-import com.kenza.callsim.BuildConfig
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -12,51 +11,25 @@ import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
 /**
- * Speaks to an ElevenLabs Conversational AI agent over a WebSocket.
+ * ElevenLabs Conversational AI provider (premium option — Kenza's cloned voice).
  *
- * The agent bundles three things server-side so the client stays thin:
- *   - speech-to-text of the user,
- *   - the LLM "brain" (configure GPT or Gemini in the ElevenLabs dashboard),
- *   - text-to-speech in Kenza's cloned voice.
+ * The agent bundles speech-to-text, the LLM brain (GPT/Gemini configured in the
+ * ElevenLabs dashboard), and cloned-voice TTS. We stream mic PCM up and play the
+ * agent's PCM down. Quota-limited, so it's offered as the optional premium voice.
  *
- * We stream mic PCM up and play agent PCM down. Protocol reference:
- * https://elevenlabs.io/docs/conversational-ai/api-reference/conversational-ai/websocket
- *
- * Agent setup notes (see README):
- *   - Audio output format must be PCM 16000 Hz.
- *   - For a *public* agent only ELEVENLABS_AGENT_ID is required.
- *   - For a *private* agent also set ELEVENLABS_API_KEY; we exchange it for a
- *     short-lived signed URL before connecting.
+ * Protocol: https://elevenlabs.io/docs/conversational-ai/api-reference/websocket
  */
-class ConversationalAiClient(
-    private val agentId: String = BuildConfig.ELEVENLABS_AGENT_ID,
-    private val apiKey: String = BuildConfig.ELEVENLABS_API_KEY,
-    private val listener: Listener
-) {
-
-    interface Listener {
-        fun onConnected()
-        /**
-         * Fired when the agent sends conversation_initiation_metadata. [sampleRate]
-         * is the agent's output rate (Hz); audio delivered to onAgentAudio is
-         * already normalized to signed 16-bit little-endian PCM at this rate.
-         */
-        fun onReady(sampleRate: Int)
-        fun onAgentAudio(pcm: ByteArray)
-        fun onUserTranscript(text: String)
-        fun onAgentText(text: String)
-        fun onInterruption()
-        fun onClosed(reason: String)
-        fun onError(message: String)
-    }
+class ElevenLabsProvider(
+    private val agentId: String,
+    private val apiKey: String,
+    private val listener: VoiceProvider.Listener,
+) : VoiceProvider {
 
     companion object {
-        private const val TAG = "ConvAiClient"
+        private const val TAG = "ElevenLabsProvider"
         private const val BASE = "wss://api.elevenlabs.io/v1/convai/conversation"
         private const val SIGNED_URL =
             "https://api.elevenlabs.io/v1/convai/conversation/get_signed_url"
-
-        fun isConfigured(): Boolean = BuildConfig.ELEVENLABS_AGENT_ID.trim().isNotEmpty()
     }
 
     private val http = OkHttpClient.Builder()
@@ -68,10 +41,10 @@ class ConversationalAiClient(
     @Volatile private var closedByUser = false
     @Volatile private var outputIsMulaw = false
 
-    fun start() {
+    override fun start() {
         closedByUser = false
         if (agentId.trim().isEmpty()) {
-            listener.onError("No ELEVENLABS_AGENT_ID set. See README → local.properties.")
+            listener.onClosed("No ElevenLabs Agent ID set. Open Settings to add one.", fatal = true)
             return
         }
         // Private agents need a signed URL; do that off the main thread.
@@ -80,7 +53,7 @@ class ConversationalAiClient(
                 if (apiKey.trim().isNotEmpty()) fetchSignedUrl() else "$BASE?agent_id=$agentId"
             } catch (e: Exception) {
                 Log.e(TAG, "signed url failed", e)
-                listener.onError("Could not start session: ${e.message}")
+                listener.onClosed("Could not start session: ${e.message}", fatal = true)
                 return@Thread
             }
             connect(url)
@@ -105,15 +78,11 @@ class ConversationalAiClient(
         socket = http.newWebSocket(req, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 Log.i(TAG, "socket open")
-                // The first client frame must be the initiation message. We send
-                // the minimal valid form (no overrides) — same as the official SDK.
                 webSocket.send("""{"type":"conversation_initiation_client_data"}""")
                 listener.onConnected()
             }
 
-            override fun onMessage(webSocket: WebSocket, text: String) {
-                handle(webSocket, text)
-            }
+            override fun onMessage(webSocket: WebSocket, text: String) = handle(webSocket, text)
 
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
                 webSocket.close(1000, null)
@@ -121,13 +90,18 @@ class ConversationalAiClient(
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 Log.i(TAG, "socket closed $code $reason")
-                if (!closedByUser) listener.onClosed("closed ($code${if (reason.isNotBlank()) " $reason" else ""})")
+                if (!closedByUser) listener.onClosed(
+                    "closed ($code${if (reason.isNotBlank()) " $reason" else ""})",
+                    fatal = isFatal(code, reason)
+                )
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 Log.e(TAG, "socket failure", t)
-                val detail = response?.let { "HTTP ${it.code}" } ?: t.message ?: "connection failed"
-                if (!closedByUser) listener.onError(detail)
+                if (closedByUser) return
+                val code = response?.code ?: 0
+                val detail = response?.let { "HTTP $code" } ?: t.message ?: "connection failed"
+                listener.onClosed(detail, fatal = code in 400..499)
             }
         })
     }
@@ -155,44 +129,45 @@ class ConversationalAiClient(
             "user_transcript" -> {
                 val t = json.optJSONObject("user_transcription_event")
                     ?.optString("user_transcript").orEmpty()
-                if (t.isNotEmpty()) listener.onUserTranscript(t)
+                if (t.isNotEmpty()) listener.onUserText(t)
             }
             "agent_response" -> {
                 val t = json.optJSONObject("agent_response_event")
                     ?.optString("agent_response").orEmpty()
                 if (t.isNotEmpty()) listener.onAgentText(t)
             }
-            "interruption" -> listener.onInterruption()
+            "interruption" -> listener.onInterrupted()
             "ping" -> {
                 val id = json.optJSONObject("ping_event")?.optInt("event_id") ?: return
                 webSocket.send("""{"type":"pong","event_id":$id}""")
             }
-            // vad_score, agent_response_correction, client_tool_call, etc. — not needed here.
             else -> Unit
         }
     }
 
-    /** Send one chunk of microphone PCM (16 kHz mono 16-bit) to the agent. */
-    fun sendAudio(pcm: ByteArray) {
+    override fun sendAudio(pcm16le16k: ByteArray) {
         val s = socket ?: return
-        val b64 = Base64.encodeToString(pcm, Base64.NO_WRAP)
+        val b64 = Base64.encodeToString(pcm16le16k, Base64.NO_WRAP)
         s.send("""{"user_audio_chunk":"$b64"}""")
     }
 
-    fun stop() {
+    override fun stop() {
         closedByUser = true
         runCatching { socket?.close(1000, "bye") }
         socket = null
     }
 
-    /** Format strings look like "pcm_16000", "pcm_24000", "ulaw_8000". */
     private fun parseSampleRate(format: String): Int =
         format.substringAfterLast('_').toIntOrNull() ?: 16_000
 
-    /**
-     * Decode 8-bit G.711 µ-law to signed 16-bit little-endian PCM. ElevenLabs
-     * uses this for the "ulaw_8000" output format; AudioTrack only plays PCM.
-     */
+    /** Out-of-credits / auth failures shouldn't trigger reconnect loops. */
+    private fun isFatal(code: Int, reason: String): Boolean {
+        val r = reason.lowercase()
+        return code == 1008 || r.contains("quota") || r.contains("credit") ||
+            r.contains("unauthorized") || r.contains("limit") || r.contains("exceeded")
+    }
+
+    /** Decode 8-bit G.711 µ-law to signed 16-bit little-endian PCM. */
     private fun ulawToPcm16(ulaw: ByteArray): ByteArray {
         val bias = 0x84
         val out = ByteArray(ulaw.size * 2)

@@ -3,6 +3,7 @@ package com.kenza.callsim.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -29,25 +31,33 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.kenza.callsim.config.ProviderType
+import com.kenza.callsim.config.SettingsData
 import com.kenza.callsim.ui.theme.IOSColors
+
+private val FEMALE_VOICES = listOf("Aoede", "Kore", "Leda", "Callirrhoe", "Sulafat", "Vindemiatrix", "Despina", "Autonoe")
 
 @Composable
 fun SettingsScreen(
-    initialAgentId: String,
-    initialApiKey: String,
-    initialContactName: String,
+    initial: SettingsData,
     voiceId: String,
-    onSave: (agentId: String, apiKey: String, contactName: String) -> Unit,
+    onSave: (SettingsData) -> Unit,
     onBack: () -> Unit,
 ) {
-    var agentId by remember { mutableStateOf(initialAgentId) }
-    var apiKey by remember { mutableStateOf(initialApiKey) }
-    var contactName by remember { mutableStateOf(initialContactName) }
+    var provider by remember { mutableStateOf(initial.provider) }
+    var geminiKey by remember { mutableStateOf(initial.geminiApiKey) }
+    var geminiVoice by remember { mutableStateOf(initial.geminiVoice) }
+    var geminiModel by remember { mutableStateOf(initial.geminiModel) }
+    var agentId by remember { mutableStateOf(initial.agentId) }
+    var elevenKey by remember { mutableStateOf(initial.elevenApiKey) }
+    var contactName by remember { mutableStateOf(initial.contactName) }
+    var persona by remember { mutableStateOf(initial.persona) }
 
     Column(
         modifier = Modifier
@@ -68,48 +78,104 @@ fun SettingsScreen(
             Text("Settings", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
         }
 
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(20.dp))
 
-        Field(
-            label = "Agent ID",
-            value = agentId,
-            onChange = { agentId = it },
-            placeholder = "ElevenLabs Conversational AI agent id",
-            help = "Required for live voice. Create an agent at elevenlabs.io → Conversational AI, set its voice to Kenza, then paste its ID here."
-        )
-        Field(
-            label = "API key (optional)",
-            value = apiKey,
-            onChange = { apiKey = it },
-            placeholder = "Only for a PRIVATE agent",
-            help = "Leave blank if your agent is public. Embedding a key in an installed app is not fully secure — keep the agent public for personal use."
-        )
-        Field(
-            label = "Contact name",
-            value = contactName,
-            onChange = { contactName = it },
-            placeholder = "Kenza",
-            help = "Shown on the call screen."
-        )
-
+        // ---- Provider switch ----
+        Text("Voice provider", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium)
         Spacer(Modifier.height(8.dp))
-        Text("Voice ID", color = IOSColors.SecondaryLabel, fontSize = 13.sp)
-        Text(voiceId.ifEmpty { "—" }, color = Color.White, fontSize = 15.sp)
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            ProviderChip("Gemini — free", provider == ProviderType.GEMINI, Modifier.weight(1f)) {
+                provider = ProviderType.GEMINI
+            }
+            ProviderChip("ElevenLabs — premium", provider == ProviderType.ELEVENLABS, Modifier.weight(1f)) {
+                provider = ProviderType.ELEVENLABS
+            }
+        }
+        Spacer(Modifier.height(6.dp))
         Text(
-            "Set inside your agent on ElevenLabs (read-only here).",
-            color = IOSColors.SecondaryLabel,
-            fontSize = 12.sp
+            if (provider == ProviderType.GEMINI)
+                "Realistic live voice on a generous free tier. Uses a preset voice (not cloned)."
+            else
+                "Speaks in Kenza's cloned voice, but is quota-limited (paid after a few minutes).",
+            color = IOSColors.SecondaryLabel, fontSize = 12.sp
         )
 
-        Spacer(Modifier.height(28.dp))
+        Spacer(Modifier.height(16.dp))
+
+        if (provider == ProviderType.GEMINI) {
+            Field("Gemini API key", geminiKey, { geminiKey = it },
+                "Get a free key at aistudio.google.com/apikey",
+                "Required. Free tier covers live voice for testing.")
+            Text("Voice", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+            Spacer(Modifier.height(8.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FEMALE_VOICES.take(4).forEach { v ->
+                    ProviderChip(v, geminiVoice == v, Modifier.weight(1f)) { geminiVoice = v }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FEMALE_VOICES.drop(4).forEach { v ->
+                    ProviderChip(v, geminiVoice == v, Modifier.weight(1f)) { geminiVoice = v }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Field("Model (advanced)", geminiModel, { geminiModel = it },
+                "gemini-2.5-flash-native-audio-preview-12-2025",
+                "Change only if the default is unavailable. Alternatives: gemini-live-2.5-flash-preview, gemini-2.0-flash-live-001.")
+        } else {
+            Field("Agent ID", agentId, { agentId = it },
+                "ElevenLabs Conversational AI agent id",
+                "Required. Create an agent at elevenlabs.io with Kenza's voice.")
+            Field("ElevenLabs API key (optional)", elevenKey, { elevenKey = it },
+                "Only for a PRIVATE agent", "Leave blank if your agent is public.")
+            Spacer(Modifier.height(4.dp))
+            Text("Voice ID: ${voiceId.ifEmpty { "—" }}", color = IOSColors.SecondaryLabel, fontSize = 12.sp)
+        }
+
+        Spacer(Modifier.height(12.dp))
+        Field("Contact name", contactName, { contactName = it }, "Kenza", "Shown on the call screen.")
+        Field("Personality (system prompt)", persona, { persona = it },
+            "How she should talk", "Used by whichever provider is active.")
+
+        Spacer(Modifier.height(24.dp))
         Button(
-            onClick = { onSave(agentId, apiKey, contactName); onBack() },
+            onClick = {
+                onSave(
+                    SettingsData(
+                        provider = provider,
+                        geminiApiKey = geminiKey,
+                        geminiVoice = geminiVoice,
+                        geminiModel = geminiModel,
+                        agentId = agentId,
+                        elevenApiKey = elevenKey,
+                        contactName = contactName,
+                        persona = persona,
+                    )
+                )
+                onBack()
+            },
             colors = ButtonDefaults.buttonColors(containerColor = IOSColors.Green),
             modifier = Modifier.fillMaxWidth().height(50.dp)
         ) {
             Text("Save", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
         }
         Spacer(Modifier.height(40.dp))
+    }
+}
+
+@Composable
+private fun ProviderChip(label: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (selected) IOSColors.Green else Color(0xFF1C1C1E))
+            .clickable(onClick = onClick)
+            .padding(vertical = 12.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(label, color = Color.White, fontSize = 13.sp,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
     }
 }
 

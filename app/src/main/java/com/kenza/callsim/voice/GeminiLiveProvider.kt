@@ -34,8 +34,6 @@ class GeminiLiveProvider(
     companion object {
         private const val TAG = "GeminiLive"
         private const val HOST = "generativelanguage.googleapis.com"
-        private const val METHOD =
-            "google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent"
         const val OUTPUT_SAMPLE_RATE = 24_000
         // Native-audio live model (free tier, most realistic). Overridable in Settings.
         const val DEFAULT_MODEL = "gemini-2.5-flash-native-audio-preview-12-2025"
@@ -56,7 +54,11 @@ class GeminiLiveProvider(
             listener.onClosed("No Gemini API key set. Open Settings and paste your key.", fatal = true)
             return
         }
-        val url = "wss://$HOST/ws/$METHOD?key=${apiKey.trim()}"
+        // Native-audio models support the expressive features (affective dialog /
+        // proactive audio) but only on the v1alpha endpoint.
+        val version = if (isNativeAudio()) "v1alpha" else "v1beta"
+        val method = "google.ai.generativelanguage.$version.GenerativeService.BidiGenerateContent"
+        val url = "wss://$HOST/ws/$method?key=${apiKey.trim()}"
         val req = Request.Builder().url(url).build()
         socket = http.newWebSocket(req, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
@@ -112,9 +114,17 @@ class GeminiLiveProvider(
             // Enable transcripts so the call screen can show what was said.
             put("inputAudioTranscription", JSONObject())
             put("outputAudioTranscription", JSONObject())
+            // Realism boosters — native-audio only, top-level (not in generationConfig).
+            if (isNativeAudio()) {
+                put("enableAffectiveDialog", true)
+                put("proactivity", JSONObject().put("proactiveAudio", true))
+            }
         }
         return JSONObject().put("setup", setup)
     }
+
+    private fun isNativeAudio(): Boolean =
+        model.contains("native-audio", ignoreCase = true)
 
     private fun handle(text: String) {
         val json = runCatching { JSONObject(text) }.getOrNull() ?: return

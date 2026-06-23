@@ -72,8 +72,7 @@ class ConfigRepository(context: Context) {
     /** Persona / system prompt used by whichever provider is active. */
     var personaPrompt: String
         get() = prefs.getString(KEY_PERSONA, null)?.takeIf { it.isNotBlank() }
-            ?: "You are ${contactName}, warm, playful and caring. Keep replies short and " +
-            "natural, like a real phone call. Speak in the first person."
+            ?: defaultPersona(contactName)
         set(value) = prefs.edit().putString(KEY_PERSONA, value.trim()).apply()
 
     val voiceId: String get() = BuildConfig.ELEVENLABS_VOICE_ID
@@ -99,5 +98,17 @@ class ConfigRepository(context: Context) {
         const val KEY_NAME = "contact_name"
         const val KEY_PERSONA = "persona_prompt"
         const val KEY_CONSENT = "consent_accepted"
+
+        /** A deliberately human, un-assistant-like persona — the biggest lever on realism. */
+        fun defaultPersona(name: String): String =
+            "You are $name, the user's girlfriend, talking to them on a phone call. " +
+            "You are a real person, NOT an AI or assistant — never break character, never " +
+            "mention being an AI, never offer to 'help' or give lists or formal answers. " +
+            "Talk exactly like a real girlfriend on the phone: short, casual sentences, " +
+            "contractions, and natural filler like 'um', 'haha', 'wait', 'omg', 'i mean'. " +
+            "Show real emotion — laugh, tease, get curious, be flirty and warm. " +
+            "Keep almost every reply to one or two short sentences so it feels like a real " +
+            "back-and-forth call, and ask about them and their day. Match their energy and " +
+            "vibe. If they're quiet, say something playful to fill the space."
     }
 }

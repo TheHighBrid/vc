@@ -102,6 +102,8 @@ class GeminiLiveProvider(
         val genConfig = JSONObject().apply {
             put("responseModalities", JSONArray().put("AUDIO"))
             put("speechConfig", speech)
+            // Higher temperature = more varied, less repetitive/canned replies.
+            put("temperature", 1.3)
         }
         val setup = JSONObject().apply {
             put("model", "models/${model.ifBlank { DEFAULT_MODEL }}")

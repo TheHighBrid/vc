@@ -36,7 +36,6 @@ object ShopifyRepo {
             sizes = listOf("XS", "S", "M", "L", "XL"),
             colors = listOf("Ojos"),
             isFeatured = true,
-            isNew = false,
             tags = listOf("Bestseller"),
             imageUrl = "${CDN}77963_672f7575-e89e-4633-84c4-1a9113e32c24.jpg",
             accent = 0xFFB44040
@@ -46,7 +45,7 @@ object ShopifyRepo {
             handle = "ojos-velour-track-pants",
             title = "OJOS Velour Track Pants",
             price = 69.99,
-            description = "Matching track pant to the OJOS Velour Track Jacket. Colorblock velour with elastic waist, tapered leg, and branded details. Limited drop — full set available.",
+            description = "Matching track pant to the OJOS Velour Track Jacket. Colorblock velour with elastic waist, tapered leg, and branded details.",
             category = "tracksuits",
             sizes = listOf("One Size"),
             colors = listOf("Rose Gold"),
@@ -74,7 +73,7 @@ object ShopifyRepo {
             handle = "ovum-satin-track-pant-pearl",
             title = "OVUM Satin Track Pant — Pearl",
             price = 149.99,
-            description = "The matching satin track pant to the OVUM Jacket. Pearl finish, elastic waistband with adjustable drawstring, tapered leg. Full set: \$309.98 CAD.",
+            description = "The matching satin track pant to the OVUM Jacket. Pearl finish, elastic waistband with adjustable drawstring, tapered leg.",
             category = "tracksuits",
             sizes = listOf("XS", "S", "M", "L", "XL"),
             colors = listOf("Pearl"),
@@ -82,21 +81,6 @@ object ShopifyRepo {
             tags = listOf("New Drop", "OVUM"),
             imageUrl = "${CDN}melato-ovum-satin-track-pant-pearl.jpg",
             accent = 0xFFD4C9A8
-        ),
-        Product(
-            id = "ovum-velvet-jacket",
-            handle = "ovum-velvet-track-jacket-forest-cream",
-            title = "OVUM Velvet Track Jacket — Forest / Cream",
-            price = 189.99,
-            description = "Velvet construction in a forest and cream colorblock. Part of the OVUM capsule — The Metamorphosis Cycle. Limited release, unisex fit.",
-            category = "tracksuits",
-            sizes = listOf("XS", "S", "M", "L", "XL"),
-            colors = listOf("Forest Cream"),
-            isFeatured = true,
-            isNew = true,
-            tags = listOf("OVUM", "Limited"),
-            imageUrl = "${CDN}melato-ovum-forest-cream-velvet-tracksuit.jpg",
-            accent = 0xFF2D4A2D
         ),
         Product(
             id = "divididos-jacket",
@@ -109,7 +93,7 @@ object ShopifyRepo {
             colors = listOf("Divididos"),
             isFeatured = true,
             tags = listOf("Core"),
-            imageUrl = "${CDN}melato-divididos-velour-track-jacket-alternate.png",
+            imageUrl = "${CDN}rn-image_picker_lib_temp_c6111df6-11a0-4d6f-af91-e1f5119e7cc7.jpg",
             accent = 0xFF5E4B8B
         ),
         Product(
@@ -175,6 +159,30 @@ object ShopifyRepo {
             accent = 0xFF6B8CAE
         ),
         Product(
+            id = "passion-jacket",
+            handle = "passion-fruit-velour-track-jacket",
+            title = "Passion Fruit Velour Track Jacket",
+            price = 89.99,
+            description = "Earth tone, warm colorblock velour jacket. One of the more expressive pieces in the tracksuit lineup — worn alone or as a full set.",
+            category = "tracksuits",
+            sizes = listOf("S", "M", "L", "XL"),
+            colors = listOf("Passion Fruit"),
+            imageUrl = "${CDN}rn-image_picker_lib_temp_f475785a-aff5-4826-8c6c-2a16cf37d44b.png",
+            accent = 0xFFE07B39
+        ),
+        Product(
+            id = "passion-pant",
+            handle = "passion-fruit-velour-track-pant",
+            title = "Passion Fruit Velour Track Pant",
+            price = 59.99,
+            description = "Matching pant to the Passion Fruit Velour Track Jacket. Earth tone colorblock, relaxed athletic fit.",
+            category = "tracksuits",
+            sizes = listOf("S", "M", "L", "XL"),
+            colors = listOf("Passion Fruit"),
+            imageUrl = "${CDN}rn-image_picker_lib_temp_ce964744-d66c-4a02-977d-a405915e7bc8.jpg",
+            accent = 0xFFE07B39
+        ),
+        Product(
             id = "midas-jacket",
             handle = "midas-runner-track-jacket",
             title = "Midas Runner Track Jacket",
@@ -199,6 +207,30 @@ object ShopifyRepo {
             colors = listOf("Midas"),
             imageUrl = "${CDN}rn-image_picker_lib_temp_7834f71d-51bd-4a28-b1d8-cd33929d1fce.png",
             accent = 0xFFC9A84C
+        ),
+        Product(
+            id = "reliance-jacket",
+            handle = "reliance-bamboo-track-jacket",
+            title = "Reliance Bamboo Track Jacket",
+            price = 99.99,
+            description = "Bamboo-blend track jacket in black salmon colorblock. Softer hand than velour — worn close or relaxed. The Reliance set sits between performance and leisure.",
+            category = "tracksuits",
+            sizes = listOf("S", "M", "L", "XL"),
+            colors = listOf("Black Salmon"),
+            imageUrl = "${CDN}rn-image_picker_lib_temp_1964916b-e416-48f1-a69d-9cb84f34f43e.png",
+            accent = 0xFFE8A598
+        ),
+        Product(
+            id = "reliance-pant",
+            handle = "reliance-bamboo-track-pant",
+            title = "Reliance Bamboo Track Pant",
+            price = 59.99,
+            description = "Bamboo-blend matching track pant. Black salmon colorblock, elastic waist, tapered leg.",
+            category = "tracksuits",
+            sizes = listOf("S", "M", "L", "XL"),
+            colors = listOf("Black Salmon"),
+            imageUrl = "${CDN}rn-image_picker_lib_temp_0c141d33-bb82-423a-8fbb-c78fd499336d.jpg",
+            accent = 0xFFE8A598
         ),
 
         // ── DENIM ───────────────────────────────────────────────────────────────
@@ -274,6 +306,18 @@ object ShopifyRepo {
             colors = listOf("Off-White"),
             imageUrl = "${CDN}rn-image_picker_lib_temp_7aba15e3-b953-40b3-ba8d-73a7a596e973.jpg",
             accent = 0xFFE8E4D9
+        ),
+        Product(
+            id = "rosetta-jean",
+            handle = "rosetta-distressed-flare-jean",
+            title = "Rosetta Distressed Flare Jean",
+            price = 79.99,
+            description = "A feminine-leaning distressed flare with warm undertones. The Rosetta pairs easily across the collection — a dependable piece in any rotation.",
+            category = "denim",
+            sizes = listOf("28", "30", "32", "34", "36"),
+            colors = listOf("Rosetta"),
+            imageUrl = "${CDN}rn-image_picker_lib_temp_e074f113-082a-4e38-afa3-e1c5cfc3c7d8.png",
+            accent = 0xFFB07560
         ),
         Product(
             id = "noir-traffic",
@@ -370,60 +414,56 @@ object ShopifyRepo {
             accent = 0xFF556B2F
         ),
         Product(
+            id = "taupe-secret",
+            handle = "taupe-secret-retro-panel-jacket",
+            title = "Taupe Secret Retro Panel Jacket",
+            price = 84.99,
+            description = "Retro panel jacket in taupe — a quieter take on the same athletic silhouette as the Olive Affair. Pairs across the denim and tracksuit collections.",
+            category = "tops",
+            sizes = listOf("S", "M", "L"),
+            colors = listOf("Taupe"),
+            imageUrl = "${CDN}rn-image_picker_lib_temp_712817b7-81a9-4dfe-9b9c-7623e4914fad.jpg",
+            accent = 0xFFB5A899
+        ),
+        Product(
+            id = "smoke-signal",
+            handle = "smoke-signal-spray-tee",
+            title = "Smoke Signal Spray Tee",
+            price = 74.99,
+            description = "A spray-effect graphic tee with a considered fade. The Smoke Signal is the foundational layer — wear it under a jacket, over a bodysuit, or on its own.",
+            category = "tops",
+            sizes = listOf("XS", "S", "M", "L", "XL"),
+            colors = listOf("Smoke"),
+            imageUrl = "${CDN}rn-image_picker_lib_temp_5a630211-5cae-4784-8d29-e11b5e492bb8.png",
+            accent = 0xFF696969
+        ),
+        Product(
+            id = "taqburni",
+            handle = "taqburni-velour-polo-shirt",
+            title = "Taqburni Velour Polo Shirt",
+            price = 99.99,
+            description = "A velour polo shirt that bridges the gap between the tracksuit line and tailored tops. The Taqburni is a Melato original — textured, intentional, limited.",
+            category = "tops",
+            sizes = listOf("XS", "S", "M", "L", "XL"),
+            colors = listOf("Taqburni"),
+            isNew = true,
+            tags = listOf("New"),
+            imageUrl = "${CDN}rn-image_picker_lib_temp_91a9cfbb-ceb9-4542-a08c-9ad837649642.jpg",
+            accent = 0xFF8B0000
+        ),
+        Product(
             id = "mint-tee",
             handle = "mint-condition-panel-tee",
             title = "Mint Condition Panel Tee",
             price = 35.99,
-            description = "An oversized panel tee in mint green and white snow colorways. Relaxed unisex fit — pairs with the Mint Condition Relaxed Pant for the full set.",
+            description = "An oversized panel tee in mint green and white snow colorways. Relaxed unisex fit — the easy statement tee from Melato Studios.",
             category = "tops",
             sizes = listOf("M", "L", "XL"),
             colors = listOf("Mint Green", "White Snow"),
             isNew = true,
-            tags = listOf("New", "Matching Set"),
+            tags = listOf("New"),
             imageUrl = "${CDN}rn-image_picker_lib_temp_8ea818d0-fc15-4f00-9b8d-5eaad4901bd8.png",
             accent = 0xFF4CAF7A
-        ),
-        Product(
-            id = "mint-pant",
-            handle = "mint-condition-relaxed-pant",
-            title = "Mint Condition Relaxed Pant",
-            price = 59.99,
-            description = "A relaxed fit trouser in light green. Designed to match the Mint Condition Panel Tee — the easy set for those who move with purpose.",
-            category = "tops",
-            sizes = listOf("M"),
-            colors = listOf("Light Green"),
-            isNew = true,
-            tags = listOf("New", "Matching Set"),
-            imageUrl = "${CDN}rn-image_picker_lib_temp_3de2f288-9a50-4985-889f-555522584fa3.png",
-            accent = 0xFF5EAD7C
-        ),
-        Product(
-            id = "bon-courage",
-            handle = "bon-courage-blush-jersey-top",
-            title = "Bon Courage Blush Jersey Top",
-            price = 60.99,
-            description = "A blush jersey top with relaxed fit and clean silhouette. The Bon Courage is the easy reach — soft hand, deliberate construction.",
-            category = "tops",
-            sizes = listOf("M", "L", "XL"),
-            colors = listOf("Blush"),
-            isNew = true,
-            tags = listOf("New"),
-            imageUrl = "${CDN}rn-image_picker_lib_temp_7e4e04f0-cd7d-481e-b01e-a32606699198.png",
-            accent = 0xFFE8B4B8
-        ),
-        Product(
-            id = "ovum-tee",
-            handle = "ovum-shell-crest-tee-pearl",
-            title = "OVUM Shell Crest Tee — Pearl",
-            price = 79.99,
-            description = "An oversized tee with a shell crest detail in pearl. Part of the OVUM capsule — The Metamorphosis Cycle. Unisex fit, limited release.",
-            category = "tops",
-            sizes = listOf("XS", "S", "M", "L", "XL"),
-            colors = listOf("Pearl"),
-            isNew = true,
-            tags = listOf("OVUM", "Limited"),
-            imageUrl = "${CDN}melato-ovum-shell-crest-tee-pearl.jpg",
-            accent = 0xFFD4C9A8
         ),
 
         // ── ACCESSORIES ─────────────────────────────────────────────────────────
@@ -453,63 +493,6 @@ object ShopifyRepo {
             accent = 0xFF5C4033
         ),
         Product(
-            id = "atlas-messenger",
-            handle = "atlas-smoke-messenger",
-            title = "Atlas Smoke Messenger",
-            price = 179.99,
-            description = "A structured smoke-tone messenger bag in vegan leather. Lock closure, premium hardware, designed for the city and the day in between.",
-            category = "accessories",
-            sizes = listOf("One Size"),
-            colors = listOf("Smoke"),
-            isNew = true,
-            tags = listOf("New"),
-            imageUrl = "",
-            accent = 0xFF4A4A4A
-        ),
-        Product(
-            id = "ovum-duffle",
-            handle = "ovum-ivory-duffle-black-trim",
-            title = "OVUM Ivory Duffle — Black Trim",
-            price = 189.99,
-            description = "Shell duffle in ivory with black trim. Part of the OVUM capsule — The Metamorphosis Cycle. Premium construction, monogram detail, limited release.",
-            category = "accessories",
-            sizes = listOf("One Size"),
-            colors = listOf("Ivory Black"),
-            isFeatured = true,
-            isNew = true,
-            tags = listOf("OVUM", "Limited"),
-            imageUrl = "${CDN}melato-ovum-shell-duffle-ivory-black.jpg",
-            accent = 0xFFEAE0D0
-        ),
-        Product(
-            id = "ovum-crescent",
-            handle = "ovum-patent-crescent-bag-rouge",
-            title = "OVUM Patent Crescent Bag — Rouge",
-            price = 159.99,
-            description = "A patent leather crescent bag in rouge. Bold silhouette, structured form, clean finish. Part of the OVUM capsule — the statement bag in the collection.",
-            category = "accessories",
-            sizes = listOf("One Size"),
-            colors = listOf("Rouge"),
-            isNew = true,
-            tags = listOf("OVUM", "Limited"),
-            imageUrl = "${CDN}melato-ovum-patent-crescent-bag-rouge.jpg",
-            accent = 0xFF8B1A1A
-        ),
-        Product(
-            id = "ovum-barrel",
-            handle = "ovum-pearl-barrel-bag-champagne",
-            title = "OVUM Pearl Barrel Bag — Champagne",
-            price = 159.99,
-            description = "A barrel bag in champagne with monogram detail. Compact and structured — the everyday bag from the OVUM capsule.",
-            category = "accessories",
-            sizes = listOf("One Size"),
-            colors = listOf("Champagne"),
-            isNew = true,
-            tags = listOf("OVUM", "Limited"),
-            imageUrl = "${CDN}melato-ovum-pearl-barrel-bag-champagne-flatlay.jpg",
-            accent = 0xFFD4C080
-        ),
-        Product(
             id = "emerald-tie",
             handle = "emerald-solstice-tile-geometric-tie",
             title = "Emerald Solstice Tile Geometric Tie",
@@ -534,6 +517,42 @@ object ShopifyRepo {
             accent = 0xFF1B1B2F
         ),
         Product(
+            id = "rosewood-tie",
+            handle = "rosewood-checkerboard-tie",
+            title = "Rosewood Checkerboard Tie",
+            price = 79.99,
+            description = "Checkerboard pattern tie in rosewood tones. Clean geometry, warm colour — a secondary statement that finishes any formal or semi-formal look.",
+            category = "accessories",
+            sizes = listOf("One Size"),
+            colors = listOf("Rosewood"),
+            imageUrl = "${CDN}rn-image_picker_lib_temp_26388381-558a-46d5-a184-8d9d6f37b66a.jpg",
+            accent = 0xFF7D3C3C
+        ),
+        Product(
+            id = "ruby-tie",
+            handle = "ruby-labyrinth-geometric-tie",
+            title = "Ruby Labyrinth Geometric Tie",
+            price = 79.99,
+            description = "A deep ruby geometric labyrinth tie. Bold pattern, refined execution — the Ruby Labyrinth finishes a look or starts a conversation.",
+            category = "accessories",
+            sizes = listOf("One Size"),
+            colors = listOf("Ruby"),
+            imageUrl = "${CDN}rn-image_picker_lib_temp_092c6019-0ff4-46fe-b879-45da3a4a6612.jpg",
+            accent = 0xFF8B0000
+        ),
+        Product(
+            id = "sunlit-tie",
+            handle = "sunlit-atrium-geometric-tie",
+            title = "Sunlit Atrium Geometric Tie",
+            price = 79.99,
+            description = "A warm, golden-hour geometric tie in sunlit tones. The Atrium is lighter in palette — a versatile accent that works across the collection.",
+            category = "accessories",
+            sizes = listOf("One Size"),
+            colors = listOf("Sunlit"),
+            imageUrl = "${CDN}rn-image_picker_lib_temp_86a1b481-6dcc-4547-abf8-46c00ec6e660.png",
+            accent = 0xFFC9A84C
+        ),
+        Product(
             id = "ivy-harness",
             handle = "ivy-trellis-harness-suspenders",
             title = "Ivy Trellis Harness Suspenders",
@@ -544,6 +563,18 @@ object ShopifyRepo {
             colors = listOf("Ivy"),
             imageUrl = "${CDN}rn-image_picker_lib_temp_d7b1a9ee-f657-40d0-ae74-8c04f65d1005.jpg",
             accent = 0xFF3A6351
+        ),
+        Product(
+            id = "salopette",
+            handle = "salopette-de-salo-harness-suspenders",
+            title = "Salopette de Salo Harness Suspenders",
+            price = 79.99,
+            description = "A fashion-forward harness suspender set with architectural construction. The Salopette de Salo is a Melato original — worn as a centrepiece or layering accent.",
+            category = "accessories",
+            sizes = listOf("One Size"),
+            colors = listOf("Salo"),
+            imageUrl = "${CDN}rn-image_picker_lib_temp_734dacab-a721-43d9-af41-79ace1525cba.jpg",
+            accent = 0xFF4A4A4A
         ),
 
         // ── EVE'S WARDROBE ───────────────────────────────────────────────────────
@@ -627,19 +658,16 @@ object ShopifyRepo {
             accent = 0xFFF5ECD7
         ),
         Product(
-            id = "ovum-slip-dress",
-            handle = "ovum-noir-lace-slip-dress",
-            title = "OVUM Noir Lace Slip Dress",
-            price = 119.99,
-            description = "A lace slip dress in noir — evening wear from the OVUM capsule. Structured through the bodice, fluid through the fall. Limited release.",
+            id = "side-note",
+            handle = "side-note-lace-rib-top",
+            title = "Side Note Lace Rib Top",
+            price = 59.99,
+            description = "A lace rib top that layers under everything or stands alone. The Side Note is the entry point to Eve's Wardrobe — subtle, tactile, considered.",
             category = "eves-wardrobe",
-            sizes = listOf("XS", "S", "M", "L", "XL"),
-            colors = listOf("Noir"),
-            isFeatured = true,
-            isNew = true,
-            tags = listOf("OVUM", "Limited", "Eve's Wardrobe"),
-            imageUrl = "${CDN}melato-ovum-noir-slip-dress-editorial.jpg",
-            accent = 0xFF1A1A1A
+            sizes = listOf("S", "M", "L"),
+            colors = listOf("Ivory", "Noir"),
+            imageUrl = "${CDN}rn-image_picker_lib_temp_3899bbd8-e29d-483f-b836-bda0c1a3b8d8.jpg",
+            accent = 0xFFD4C5B2
         )
     )
 

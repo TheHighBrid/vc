@@ -162,6 +162,7 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
                 onSessionActive(demo = false)
             }
             override fun onAgentAudio(pcm: ByteArray) {
+                mic?.agentSpeaking = true
                 player?.write(pcm)
                 markSpeaking()
             }
@@ -215,7 +216,10 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(activity = AgentActivity.SPEAKING) }
         speakingResetJob?.cancel()
         speakingResetJob = viewModelScope.launch {
-            delay(700)
+            // Hold the mic gate a touch past the last audio chunk so the speaker
+            // tail doesn't bleed in, then reopen it for the user's turn.
+            delay(800)
+            mic?.agentSpeaking = false
             _state.update {
                 if (it.phase == CallPhase.ACTIVE) it.copy(activity = AgentActivity.LISTENING) else it
             }

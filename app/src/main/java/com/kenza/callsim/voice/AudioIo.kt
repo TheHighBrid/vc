@@ -7,6 +7,9 @@ import android.media.AudioManager
 import android.media.AudioRecord
 import android.media.AudioTrack
 import android.media.MediaRecorder
+import android.media.audiofx.AcousticEchoCanceler
+import android.media.audiofx.AutomaticGainControl
+import android.media.audiofx.NoiseSuppressor
 import android.util.Log
 import kotlin.concurrent.thread
 
@@ -35,9 +38,20 @@ class MicRecorder(
 
     @Volatile var muted: Boolean = false
 
+    /**
+     * True while the agent is actively speaking. We stop forwarding mic audio
+     * (half-duplex) so the agent's own voice coming out of the speaker isn't
+     * captured and mistaken for the user talking — which otherwise makes the
+     * server interrupt and cut off every reply after the greeting.
+     */
+    @Volatile var agentSpeaking: Boolean = false
+
     private var record: AudioRecord? = null
     @Volatile private var running = false
     private var worker: Thread? = null
+    private var aec: AcousticEchoCanceler? = null
+    private var ns: NoiseSuppressor? = null
+    private var agc: AutomaticGainControl? = null
 
     @SuppressLint("MissingPermission") // caller guarantees RECORD_AUDIO is granted
     fun start() {
@@ -76,6 +90,19 @@ class MicRecorder(
             return
         }
 
+        // Attach platform echo cancellation / noise suppression so the speaker
+        // output doesn't leak back into the mic. Best-effort: not all devices
+        // support these, and they're harmless when absent.
+        record?.audioSessionId?.let { session ->
+            if (AcousticEchoCanceler.isAvailable())
+                aec = runCatching { AcousticEchoCanceler.create(session)?.apply { enabled = true } }.getOrNull()
+            if (NoiseSuppressor.isAvailable())
+                ns = runCatching { NoiseSuppressor.create(session)?.apply { enabled = true } }.getOrNull()
+            if (AutomaticGainControl.isAvailable())
+                agc = runCatching { AutomaticGainControl.create(session)?.apply { enabled = true } }.getOrNull()
+            Log.i(TAG, "effects aec=${aec != null} ns=${ns != null} agc=${agc != null}")
+        }
+
         running = true
         runCatching { record?.startRecording() }
             .onFailure { onError("Couldn't start the microphone: ${it.message}"); running = false; return }
@@ -87,7 +114,9 @@ class MicRecorder(
                 val read = record?.read(buffer, 0, buffer.size) ?: -1
                 if (read > 0) {
                     if (!announced) { announced = true; onStreaming() }
-                    if (!muted) onChunk(buffer.copyOf(read))
+                    // Drain the buffer always, but only forward when it's the
+                    // user's turn (not muted, agent not speaking).
+                    if (!muted && !agentSpeaking) onChunk(buffer.copyOf(read))
                 } else if (read < 0) {
                     onError("Microphone read error ($read).")
                     break
@@ -100,6 +129,9 @@ class MicRecorder(
         running = false
         worker?.join(500)
         worker = null
+        runCatching { aec?.release() }; aec = null
+        runCatching { ns?.release() }; ns = null
+        runCatching { agc?.release() }; agc = null
         runCatching { record?.stop() }
         record?.release()
         record = null

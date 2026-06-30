@@ -216,9 +216,10 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(activity = AgentActivity.SPEAKING) }
         speakingResetJob?.cancel()
         speakingResetJob = viewModelScope.launch {
-            // Hold the mic gate a touch past the last audio chunk so the speaker
-            // tail doesn't bleed in, then reopen it for the user's turn.
-            delay(800)
+            // Hold the mic gate just past the last audio chunk so the speaker
+            // tail doesn't bleed in, then reopen it for the user's turn. Kept
+            // short so the user can reply quickly (AEC covers residual echo).
+            delay(350)
             mic?.agentSpeaking = false
             _state.update {
                 if (it.phase == CallPhase.ACTIVE) it.copy(activity = AgentActivity.LISTENING) else it

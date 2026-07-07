@@ -56,6 +56,7 @@ fun SettingsScreen(
     var geminiModel by remember { mutableStateOf(initial.geminiModel) }
     var agentId by remember { mutableStateOf(initial.agentId) }
     var elevenKey by remember { mutableStateOf(initial.elevenApiKey) }
+    var backups by remember { mutableStateOf(initial.elevenBackups) }
     var contactName by remember { mutableStateOf(initial.contactName) }
     var persona by remember { mutableStateOf(initial.persona) }
 
@@ -129,6 +130,10 @@ fun SettingsScreen(
                 "Required. Create an agent at elevenlabs.io with Kenza's voice.")
             Field("ElevenLabs API key (optional)", elevenKey, { elevenKey = it },
                 "Only for a PRIVATE agent", "Leave blank if your agent is public.")
+            Field("Backup keys — auto failover", backups, { backups = it },
+                "agentId, apiKey  (one account per line)",
+                "When a key runs out of credit the call auto-switches to the next line. " +
+                    "Each ElevenLabs account has its own agent, so include both its agent ID and key.")
             Spacer(Modifier.height(4.dp))
             Text("Voice ID: ${voiceId.ifEmpty { "—" }}", color = IOSColors.SecondaryLabel, fontSize = 12.sp)
         }
@@ -149,6 +154,7 @@ fun SettingsScreen(
                         geminiModel = geminiModel,
                         agentId = agentId,
                         elevenApiKey = elevenKey,
+                        elevenBackups = backups,
                         contactName = contactName,
                         persona = persona,
                     )

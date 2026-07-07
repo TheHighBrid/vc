@@ -57,6 +57,11 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
     private val maxConsecutiveReconnects = 4
     private var hadUserInteraction = false
 
+    // ElevenLabs multi-key failover: rotate through (agentId, apiKey) pairs as
+    // each account runs out of credit, so the call keeps going uninterrupted.
+    private var elevenCreds: List<Pair<String, String>> = emptyList()
+    private var credIndex = 0
+
     // ---- Incoming / outgoing flow -------------------------------------------
 
     fun simulateIncomingCall() {
@@ -88,6 +93,8 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
         userEnded = false
         reconnectAttempts = 0
         hadUserInteraction = false
+        elevenCreds = config.elevenCredentials()
+        credIndex = 0
         _state.update { it.copy(phase = CallPhase.CONNECTING) }
         if (!config.isConfigured) {
             // Pure UI demo — show the live call screen without needing the mic.
@@ -194,11 +201,14 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
                 systemPrompt = config.personaPrompt,
                 listener = listener,
             )
-            ProviderType.ELEVENLABS -> ElevenLabsProvider(
-                agentId = config.agentId,
-                apiKey = config.apiKey,
-                listener = listener,
-            )
+            ProviderType.ELEVENLABS -> {
+                val (aid, key) = elevenCreds.getOrElse(credIndex) { config.agentId to config.apiKey }
+                ElevenLabsProvider(
+                    agentId = aid,
+                    apiKey = key,
+                    listener = listener,
+                )
+            }
         }
 
     private fun onSessionActive(demo: Boolean) {
@@ -238,6 +248,23 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
             val phase = _state.value.phase
             val onCall = phase == CallPhase.ACTIVE || phase == CallPhase.CONNECTING
 
+            // Failover: the current ElevenLabs account is out of credit but we
+            // have another key queued — rotate to it and reconnect without
+            // ending the call. (Server state can't carry over, but the call
+            // continues on the next account within ~1s.)
+            if (onCall && isQuotaExhausted(message) && credIndex < elevenCreds.lastIndex) {
+                credIndex++
+                reconnectAttempts = 0
+                stopVoiceSession()
+                _state.update {
+                    it.copy(phase = CallPhase.CONNECTING, micStreaming = false,
+                        activity = AgentActivity.THINKING)
+                }
+                delay(500)
+                if (!userEnded) startVoiceSession()
+                return@launch
+            }
+
             // Only a session with real two-way interaction refreshes the retry
             // budget. This lets a genuine long call reconnect indefinitely past a
             // server duration limit, while a quota/greeting replay loop (user
@@ -262,7 +289,14 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    private fun isQuotaExhausted(message: String): Boolean =
+        message.contains("quota", true) || message.contains("credit", true) ||
+            message.contains("RESOURCE_EXHAUSTED", true) || message.contains("limit", true) ||
+            message.contains("exceeded", true) || message.contains("1008")
+
     private fun friendlyError(message: String, fatal: Boolean): String = when {
+        isQuotaExhausted(message) && elevenCreds.size > 1 ->
+            "All ${elevenCreds.size} ElevenLabs keys are out of credit. Add another in Settings or top up."
         message.contains("quota", true) || message.contains("RESOURCE_EXHAUSTED", true) ||
             message.contains("credit", true) || message.contains("limit", true) ->
             "Out of provider quota/credits. Switch voice provider in Settings, or top up your plan."
@@ -356,6 +390,7 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
         geminiModel = config.geminiModel,
         agentId = config.agentId,
         elevenApiKey = config.apiKey,
+        elevenBackups = config.elevenBackups,
         contactName = config.contactName,
         persona = config.personaPrompt,
     )
@@ -367,6 +402,7 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
         config.geminiModel = s.geminiModel
         config.agentId = s.agentId
         config.apiKey = s.elevenApiKey
+        config.elevenBackups = s.elevenBackups
         config.contactName = s.contactName
         config.personaPrompt = s.persona
         _state.update {

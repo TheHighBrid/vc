@@ -15,6 +15,7 @@ data class SettingsData(
     val geminiModel: String,
     val agentId: String,
     val elevenApiKey: String,
+    val elevenBackups: String,
     val contactName: String,
     val persona: String,
 )
@@ -57,6 +58,31 @@ class ConfigRepository(context: Context) {
         get() = prefs.getString(KEY_AGENT, null)?.takeIf { it.isNotBlank() }
             ?: BuildConfig.ELEVENLABS_AGENT_ID
         set(value) = prefs.edit().putString(KEY_AGENT, value.trim()).apply()
+
+    /**
+     * Extra ElevenLabs "agentId, apiKey" pairs (one per line) used for automatic
+     * failover when the primary account runs out of credit. Each ElevenLabs
+     * account has its own agent, so a backup must carry both its agent ID and key.
+     */
+    var elevenBackups: String
+        get() = prefs.getString(KEY_ELEVEN_BACKUPS, null).orEmpty()
+        set(value) = prefs.edit().putString(KEY_ELEVEN_BACKUPS, value.trim()).apply()
+
+    /**
+     * Ordered list of (agentId, apiKey) pairs to try during a call: the primary
+     * credentials first, then each parsed backup line. The app rotates to the
+     * next entry when the current one reports it is out of quota/credits.
+     */
+    fun elevenCredentials(): List<Pair<String, String>> {
+        val list = mutableListOf<Pair<String, String>>()
+        val primaryAgent = agentId.trim()
+        if (primaryAgent.isNotEmpty()) list += primaryAgent to apiKey.trim()
+        for (line in elevenBackups.lines()) {
+            val parts = line.split(',', '|', ';').map { it.trim() }.filter { it.isNotEmpty() }
+            if (parts.size >= 2) list += parts[0] to parts[1]
+        }
+        return list.distinct()
+    }
 
     var apiKey: String
         get() = prefs.getString(KEY_API, null)?.takeIf { it.isNotBlank() }
@@ -118,6 +144,7 @@ class ConfigRepository(context: Context) {
         const val KEY_GEMINI_VOICE = "gemini_voice"
         const val KEY_AGENT = "agent_id"
         const val KEY_API = "api_key"
+        const val KEY_ELEVEN_BACKUPS = "eleven_backups"
         const val KEY_NAME = "contact_name"
         const val KEY_PERSONA = "persona_prompt"
         const val KEY_PERSONA_VERSION = "persona_version"

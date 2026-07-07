@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -44,6 +45,7 @@ fun HomeScreen(
     onCall: () -> Unit,
     onSimulateIncoming: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenSchedule: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -54,7 +56,18 @@ fun HomeScreen(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Spacer(Modifier.height(48.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "Schedule",
+                color = com.kenza.callsim.ui.theme.IOSColors.Blue,
+                fontSize = 15.sp,
+                modifier = Modifier.clickable(onClick = onOpenSchedule)
+            )
+            Spacer(Modifier.width(16.dp))
             Icon(
                 Icons.Filled.Settings,
                 contentDescription = "Settings",

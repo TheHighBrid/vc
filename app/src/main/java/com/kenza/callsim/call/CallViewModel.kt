@@ -70,6 +70,17 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
         ringtone.start()
     }
 
+    /**
+     * Triggered by a fired schedule (via the full-screen notification). Rings
+     * from any idle/ended state; ignored if a call is already in progress.
+     */
+    fun onScheduledIncomingCall() {
+        val phase = _state.value.phase
+        if (phase != CallPhase.IDLE && phase != CallPhase.ENDED) return
+        _state.update { it.copy(phase = CallPhase.INCOMING, errorMessage = null) }
+        ringtone.start()
+    }
+
     fun placeCall() {
         ringtone.stop()
         _state.update { it.copy(phase = CallPhase.DIALING, errorMessage = null) }

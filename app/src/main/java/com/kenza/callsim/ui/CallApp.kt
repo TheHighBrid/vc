@@ -21,6 +21,7 @@ import com.kenza.callsim.call.CallViewModel
 import com.kenza.callsim.ui.screens.HomeScreen
 import com.kenza.callsim.ui.screens.InCallScreen
 import com.kenza.callsim.ui.screens.IncomingCallScreen
+import com.kenza.callsim.ui.screens.ScheduleScreen
 import com.kenza.callsim.ui.screens.SettingsScreen
 
 @Composable
@@ -30,6 +31,7 @@ fun CallApp(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var showSettings by remember { mutableStateOf(false) }
+    var showSchedule by remember { mutableStateOf(false) }
     var showConsent by remember { mutableStateOf(!viewModel.isConsentAccepted()) }
 
     // The ViewModel asks for the mic by flagging the error channel.
@@ -47,6 +49,11 @@ fun CallApp(
         return
     }
 
+    if (showSchedule) {
+        ScheduleScreen(onBack = { showSchedule = false })
+        return
+    }
+
     AnimatedContent(
         targetState = state.phase,
         transitionSpec = { fadeIn() togetherWith fadeOut() },
@@ -60,6 +67,7 @@ fun CallApp(
                 onCall = viewModel::placeCall,
                 onSimulateIncoming = viewModel::simulateIncomingCall,
                 onOpenSettings = { showSettings = true },
+                onOpenSchedule = { showSchedule = true },
                 modifier = Modifier
             )
 

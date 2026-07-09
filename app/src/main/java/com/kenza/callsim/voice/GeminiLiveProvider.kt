@@ -117,6 +117,9 @@ class GeminiLiveProvider(
             put("model", "models/${model.ifBlank { DEFAULT_MODEL }}")
             put("generationConfig", genConfig)
             put("realtimeInputConfig", realtimeInput)
+            // Google Search grounding so she can answer real-time questions
+            // (who's playing today, news, weather) instead of drawing a blank.
+            put("tools", JSONArray().put(JSONObject().put("googleSearch", JSONObject())))
             if (systemPrompt.isNotBlank()) {
                 put("systemInstruction", JSONObject().put(
                     "parts", JSONArray().put(JSONObject().put("text", systemPrompt))
@@ -162,6 +165,18 @@ class GeminiLiveProvider(
             JSONObject().put("audio", JSONObject()
                 .put("data", b64)
                 .put("mimeType", "audio/pcm;rate=16000")))
+        s.send(msg.toString())
+    }
+
+    override fun sendText(text: String) {
+        val s = socket ?: return
+        val msg = JSONObject().put("clientContent", JSONObject().apply {
+            put("turns", JSONArray().put(
+                JSONObject().put("role", "user")
+                    .put("parts", JSONArray().put(JSONObject().put("text", text)))
+            ))
+            put("turnComplete", true)
+        })
         s.send(msg.toString())
     }
 

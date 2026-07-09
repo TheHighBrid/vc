@@ -14,6 +14,12 @@ interface VoiceProvider {
     fun sendAudio(pcm16le16k: ByteArray)
     fun stop()
 
+    /**
+     * Inject a text turn to prompt a spoken reply (e.g. a silence check-in).
+     * Only supported by providers that accept client text; no-op otherwise.
+     */
+    fun sendText(text: String) {}
+
     interface Listener {
         /** Socket open; handshake in progress. */
         fun onConnected()

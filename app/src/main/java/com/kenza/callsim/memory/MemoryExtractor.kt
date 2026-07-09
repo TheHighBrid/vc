@@ -54,7 +54,8 @@ object MemoryExtractor {
                 "greetings and filler. Return ONLY a JSON array (no prose). Each element: " +
                 "{\"kind\":\"FACT\"|\"PREFERENCE\"|\"EVENT\"|\"PLAN\", \"text\":\"short phrase about the USER\", " +
                 "\"importance\":1-5, \"dueInDays\": integer (only for future PLANs)}. " +
-                "Keep each text short and specific. Max 8 items. If nothing is worth remembering, return []."
+                "Keep each text short and specific. Max 8 items. If nothing is worth remembering, return []. " +
+                "IMPORTANT: if the user explicitly asks $name to remember something, ALWAYS include it with importance 5."
 
         val body = JSONObject().apply {
             put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", instruction))))

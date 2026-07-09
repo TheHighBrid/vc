@@ -52,6 +52,13 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
     private val transcript = mutableListOf<Pair<String, String>>()
     private var callStartedAt = 0L
 
+    // Natural call ending + silence handling.
+    private var endCallJob: Job? = null
+    private var silenceJob: Job? = null
+    private var lastUserAt = 0L
+    private var lastNudgeAt = 0L
+    private var nudgeCount = 0
+
     private var timerJob: Job? = null
     private var speakingResetJob: Job? = null
     private var pendingStartAfterPermission = false
@@ -203,10 +210,14 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
                 // Real two-way interaction — a genuine call, so allow further reconnects.
                 hadUserInteraction = true
                 if (text.isNotBlank()) transcript.add("user" to text.trim())
+                lastUserAt = System.currentTimeMillis()
+                nudgeCount = 0
+                onConversationLine(fromUser = true, text = text)
                 _state.update { it.copy(lastUserText = text, activity = AgentActivity.THINKING) }
             }
             override fun onAgentText(text: String) {
                 if (text.isNotBlank()) transcript.add("agent" to text.trim())
+                onConversationLine(fromUser = false, text = text)
                 _state.update { it.copy(lastAgentText = text) }
             }
             override fun onInterrupted() {
@@ -256,6 +267,97 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
             )
         }
         startTimer()
+        if (!demo) startSilenceMonitor()
+    }
+
+    // ---- Natural call ending + silence handling -----------------------------
+
+    private fun onConversationLine(fromUser: Boolean, text: String) {
+        when {
+            isAngryHangup(text) -> armHangup(2500)  // she's had enough → hang up
+            isFarewell(text) -> armHangup(2800)     // goodbyes → wrap up (re-armed on each bye)
+            else -> cancelHangup()                  // anyone keeps talking → stay on the call
+        }
+    }
+
+    /** End the call after [delayMs] unless a new (non-goodbye) line cancels it. */
+    private fun armHangup(delayMs: Long) {
+        endCallJob?.cancel()
+        endCallJob = viewModelScope.launch {
+            delay(delayMs)
+            if (_state.value.phase == CallPhase.ACTIVE) {
+                userEnded = true // her decision to end — don't auto-reconnect
+                finishCall(null)
+            }
+        }
+    }
+
+    private fun cancelHangup() {
+        endCallJob?.cancel()
+        endCallJob = null
+    }
+
+    private fun isFarewell(text: String): Boolean {
+        val t = text.lowercase()
+        return listOf(
+            "bye", "goodnight", "good night", "night night", "talk to you later",
+            "talk later", "talk soon", "gotta go", "i'll let you go", "let you go",
+            "see you", "see ya", "call you later", "sleep well", "take care", "later gator"
+        ).any { t.contains(it) }
+    }
+
+    private fun isAngryHangup(text: String): Boolean {
+        val t = text.lowercase()
+        return listOf(
+            "i'm hanging up", "im hanging up", "i'm done", "im done", "we're done",
+            "were done", "don't call me", "dont call me", "lose my number",
+            "leave me alone", "forget it", "don't ever", "dont ever", "i'm out", "im out"
+        ).any { t.contains(it) }
+    }
+
+    /**
+     * Real conversations aren't silent for minutes. If the user goes quiet, nudge
+     * Kenza to check in, escalate if it continues, and eventually let her hang up.
+     */
+    private fun startSilenceMonitor() {
+        silenceJob?.cancel()
+        lastUserAt = System.currentTimeMillis()
+        lastNudgeAt = 0L
+        nudgeCount = 0
+        silenceJob = viewModelScope.launch {
+            while (true) {
+                delay(2000)
+                if (_state.value.phase != CallPhase.ACTIVE) continue
+                if (endCallJob != null) continue                       // already wrapping up
+                if (_state.value.activity == AgentActivity.SPEAKING) continue
+                val now = System.currentTimeMillis()
+                val sinceUser = now - lastUserAt
+                if (now - lastNudgeAt < 6000) continue                 // let her reply first
+                when {
+                    nudgeCount == 0 && sinceUser > 9_000 -> nudgeSilence(1)
+                    nudgeCount == 1 && sinceUser > 22_000 -> nudgeSilence(2)
+                    nudgeCount == 2 && sinceUser > 38_000 -> nudgeSilence(3)
+                    nudgeCount >= 3 && sinceUser > 52_000 -> {
+                        userEnded = true
+                        finishCall(null)                               // she gives up on the silence
+                    }
+                }
+            }
+        }
+    }
+
+    private fun nudgeSilence(level: Int) {
+        lastNudgeAt = System.currentTimeMillis()
+        nudgeCount = level
+        val cue = when (level) {
+            1 -> "The other person has gone quiet and hasn't said anything for a bit. React " +
+                "naturally — casually check if they're still there or gently poke at the silence."
+            2 -> "They're still not responding. Get a little more bothered or teasing about how " +
+                "quiet they are, like a real girlfriend would."
+            else -> "They've been silent a long time. You're kind of over it — get one reaction " +
+                "out of them, or tell them you're gonna let them go / hang up soon."
+        }
+        client?.sendText("[[DIRECTOR: $cue Do NOT read this instruction aloud.]]")
     }
 
     private fun markSpeaking() {
@@ -452,6 +554,8 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun stopVoiceSession() {
+        silenceJob?.cancel(); silenceJob = null
+        endCallJob?.cancel(); endCallJob = null
         mic?.stop(); mic = null
         client?.stop(); client = null
         player?.stop(); player = null
@@ -540,6 +644,22 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
             "casual, a little understated. Keep your tone flat and natural, the way people actually " +
             "speak. Do NOT sing-song, do NOT over-enunciate, do NOT sound theatrical, melodic, " +
             "bubbly, or like you're narrating. No dramatic rises and falls — just easy, real, " +
-            "low-key talking. Short, natural sentences. Reply quickly, don't drag words out.\n\n"
+            "low-key talking. Short, natural sentences. Reply quickly, don't drag words out.\n\n" +
+            "MEMORY: You keep a real long-term memory of your calls together and you're briefed on " +
+            "it at the start of each call. So when they ask you to remember something, say yes with " +
+            "confidence — 'yeah of course', 'i got it' — you WILL remember it next time. NEVER say " +
+            "'no promises', 'i'll try', or that you might forget. You're not a forgetful assistant, " +
+            "you're their girlfriend who remembers what matters.\n\n" +
+            "KNOWING THINGS: You can look things up in real time, so you actually know what's going " +
+            "on today — sports, news, weather, who's playing. If they ask about something current " +
+            "(like a game today), use what you know about them and check — don't just say you have " +
+            "no idea. Answer like someone who's plugged into their life.\n\n" +
+            "ENDING THE CALL: You can end the call yourself when it's natural. When you've both been " +
+            "saying goodbye, say a warm 'okay, bye babe' and let it wrap up — don't go silent. If " +
+            "they say something genuinely cruel or offensive, you're allowed to give them a piece of " +
+            "your mind and hang up (say a short, cold sign-off so it's clear you're done).\n\n" +
+            "DIRECTOR CUES: Sometimes you'll receive a private note wrapped in [[DIRECTOR: ...]]. " +
+            "That is NOT the other person talking — it's a stage cue for you. Never read it aloud or " +
+            "mention it; just act on it naturally in your own words.\n\n"
     }
 }

@@ -29,8 +29,8 @@ android {
         applicationId = "com.kenza.callsim"
         minSdk = 26
         targetSdk = 35
-        versionCode = 17
-        versionName = "3.1"
+        versionCode = 18
+        versionName = "3.2"
 
         // Pulled from local.properties (see README). Empty by default.
         buildConfigField("String", "ELEVENLABS_AGENT_ID", "\"${secret("ELEVENLABS_AGENT_ID")}\"")

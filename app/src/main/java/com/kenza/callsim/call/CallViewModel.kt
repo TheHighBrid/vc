@@ -324,21 +324,41 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private fun isQuotaExhausted(message: String): Boolean =
-        message.contains("quota", true) || message.contains("credit", true) ||
-            message.contains("RESOURCE_EXHAUSTED", true) || message.contains("limit", true) ||
-            message.contains("exceeded", true) || message.contains("1008")
+    /**
+     * True only for a genuine credit/quota exhaustion — NOT for generic policy
+     * closes (WebSocket 1008), rate/concurrency limits, or override rejections.
+     * Misclassifying those as quota made a single failure stampede through every
+     * backup key and falsely report "out of credit."
+     */
+    private fun isQuotaExhausted(message: String): Boolean {
+        val m = message.lowercase()
+        return m.contains("quota") || m.contains("credit") ||
+            m.contains("insufficient") || m.contains("resource_exhausted")
+    }
+
+    /** ElevenLabs blocks free-tier TTS across accounts it thinks are the same person. */
+    private fun isFreeTierBlocked(message: String): Boolean {
+        val m = message.lowercase()
+        return m.contains("unusual activity") || m.contains("free tier") ||
+            m.contains("free_tier") || m.contains("abuse")
+    }
 
     private fun friendlyError(message: String, fatal: Boolean): String = when {
+        isFreeTierBlocked(message) ->
+            "ElevenLabs blocked free-tier voice on this account (it flags multiple free " +
+                "accounts as \"unusual activity\"). Use the Gemini voice, or a paid ElevenLabs " +
+                "plan.\n($message)"
         isQuotaExhausted(message) && elevenCreds.size > 1 ->
-            "All ${elevenCreds.size} ElevenLabs keys are out of credit. Add another in Settings or top up."
-        message.contains("quota", true) || message.contains("RESOURCE_EXHAUSTED", true) ||
-            message.contains("credit", true) || message.contains("limit", true) ->
-            "Out of provider quota/credits. Switch voice provider in Settings, or top up your plan."
+            "All ${elevenCreds.size} ElevenLabs keys reported out of credit. If an account still " +
+                "shows credit, the real reason is above.\n($message)"
+        isQuotaExhausted(message) ->
+            "Out of ElevenLabs credit. Add a backup key in Settings, or top up.\n($message)"
+        message.contains("override", true) ->
+            "ElevenLabs rejected the persona/memory override. Enable Security → Overrides → " +
+                "System prompt on your agent, or turn that toggle off in Settings.\n($message)"
         message.contains("API key", true) || message.contains("Agent ID", true) ||
             message.contains("401") || message.contains("403") || message.contains("UNAUTHENTICATED", true) ->
             "Authentication failed. Check your key/ID in Settings.\n($message)"
-        fatal -> message
         else -> message
     }
 

@@ -61,7 +61,13 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
 
     private var timerJob: Job? = null
     private var speakingResetJob: Job? = null
+    private var silenceMonitorJob: Job? = null
+    private var pendingHangupJob: Job? = null
     private var pendingStartAfterPermission = false
+    private var lastHumanActivityAtMs = 0L
+    private var lastAgentAudioAtMs = 0L
+    private var hasConversationActivity = false
+    private var silenceStage = 0
 
     // Auto-reconnect: when a provider ends a session (e.g. a server-side
     // conversation-duration limit) we transparently re-establish the call. To
@@ -261,6 +267,7 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
         }
 
     private fun onSessionActive(demo: Boolean) {
+        resetConversationWatchers()
         _state.update {
             it.copy(
                 phase = CallPhase.ACTIVE,
@@ -366,6 +373,8 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun markSpeaking() {
+        lastAgentAudioAtMs = System.currentTimeMillis()
+        hasConversationActivity = true
         _state.update { it.copy(activity = AgentActivity.SPEAKING) }
         speakingResetJob?.cancel()
         speakingResetJob = viewModelScope.launch {
@@ -513,6 +522,8 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
         stopVoiceSession()
         ringtone.stop()
         timerJob?.cancel()
+        silenceMonitorJob?.cancel()
+        pendingHangupJob?.cancel()
         _state.update {
             it.copy(
                 phase = CallPhase.ENDED,

@@ -154,6 +154,13 @@ class ConversationalAiClient(
         }
     }
 
+
+    /** Send a low-priority instruction to the agent without speaking as the user. */
+    fun sendContextualUpdate(text: String) {
+        val escaped = JSONObject.quote(text)
+        socket?.send("""{"type":"contextual_update","text":$escaped}""")
+    }
+
     /** Send one chunk of microphone PCM (16 kHz mono 16-bit) to the agent. */
     fun sendAudio(pcm: ByteArray) {
         val s = socket ?: return

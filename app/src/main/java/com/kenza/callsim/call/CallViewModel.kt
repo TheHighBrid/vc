@@ -38,7 +38,13 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
 
     private var timerJob: Job? = null
     private var speakingResetJob: Job? = null
+    private var silenceMonitorJob: Job? = null
+    private var pendingHangupJob: Job? = null
     private var pendingStartAfterPermission = false
+    private var lastHumanActivityAtMs = 0L
+    private var lastAgentAudioAtMs = 0L
+    private var hasConversationActivity = false
+    private var silenceStage = 0
 
     // ---- Incoming / outgoing flow -------------------------------------------
 
@@ -130,9 +136,13 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
                 markSpeaking()
             }
             override fun onUserTranscript(text: String) {
+                noteConversationActivity(cancelPendingHangup = true)
+                handlePossibleCallEnding(text)
                 _state.update { it.copy(lastUserText = text, activity = AgentActivity.THINKING) }
             }
             override fun onAgentText(text: String) {
+                noteConversationActivity(cancelPendingHangup = false)
+                handlePossibleCallEnding(text)
                 _state.update { it.copy(lastAgentText = text) }
             }
             override fun onInterruption() {
@@ -149,6 +159,7 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun onSessionActive(demo: Boolean) {
+        resetConversationWatchers()
         _state.update {
             it.copy(
                 phase = CallPhase.ACTIVE,
@@ -157,9 +168,12 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
             )
         }
         startTimer()
+        startSilenceMonitor()
     }
 
     private fun markSpeaking() {
+        lastAgentAudioAtMs = System.currentTimeMillis()
+        hasConversationActivity = true
         _state.update { it.copy(activity = AgentActivity.SPEAKING) }
         speakingResetJob?.cancel()
         speakingResetJob = viewModelScope.launch {
@@ -213,6 +227,8 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
         stopVoiceSession()
         ringtone.stop()
         timerJob?.cancel()
+        silenceMonitorJob?.cancel()
+        pendingHangupJob?.cancel()
         _state.update {
             it.copy(
                 phase = CallPhase.ENDED,
@@ -237,10 +253,93 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun stopVoiceSession() {
+        silenceMonitorJob?.cancel(); silenceMonitorJob = null
+        pendingHangupJob?.cancel(); pendingHangupJob = null
+        speakingResetJob?.cancel(); speakingResetJob = null
         mic?.stop(); mic = null
         client?.stop(); client = null
         player?.stop(); player = null
         restoreAudioRouting()
+    }
+
+    private fun resetConversationWatchers() {
+        val now = System.currentTimeMillis()
+        lastHumanActivityAtMs = now
+        lastAgentAudioAtMs = now
+        hasConversationActivity = false
+        silenceStage = 0
+        pendingHangupJob?.cancel()
+    }
+
+    private fun noteConversationActivity(cancelPendingHangup: Boolean) {
+        lastHumanActivityAtMs = System.currentTimeMillis()
+        hasConversationActivity = true
+        silenceStage = 0
+        if (cancelPendingHangup) pendingHangupJob?.cancel()
+    }
+
+    private fun handlePossibleCallEnding(text: String) {
+        val normalized = text.lowercase()
+            .replace(Regex("[^a-z0-9' ]"), " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+        if (normalized.isBlank()) return
+
+        val angryGoodbye = listOf(
+            "i'm done", "im done", "don't call me", "dont call me", "lose my number",
+            "never call me", "leave me alone", "shut up", "fuck off"
+        ).any(normalized::contains)
+        val warmGoodbye = listOf(
+            "bye", "goodbye", "talk to you later", "see you later", "take care",
+            "good night", "goodnight", "catch you later", "i gotta go", "gotta go"
+        ).any(normalized::contains)
+
+        val delayMs = when {
+            angryGoodbye -> 3_500L
+            warmGoodbye -> 2_800L
+            else -> return
+        }
+        pendingHangupJob?.cancel()
+        pendingHangupJob = viewModelScope.launch {
+            val scheduledAt = lastHumanActivityAtMs
+            delay(delayMs)
+            val noOneContinued = lastHumanActivityAtMs == scheduledAt
+            if (_state.value.phase == CallPhase.ACTIVE && noOneContinued) endCall()
+        }
+    }
+
+    private fun startSilenceMonitor() {
+        silenceMonitorJob?.cancel()
+        silenceMonitorJob = viewModelScope.launch {
+            while (true) {
+                delay(1000)
+                if (_state.value.phase != CallPhase.ACTIVE || !hasConversationActivity) continue
+
+                val now = System.currentTimeMillis()
+                val quietFor = now - maxOf(lastHumanActivityAtMs, lastAgentAudioAtMs)
+                val agentJustSpoke = now - lastAgentAudioAtMs < MIN_SILENCE_AFTER_AGENT_MS
+                if (agentJustSpoke) continue
+
+                when {
+                    quietFor >= HANGUP_AFTER_SILENCE_MS && silenceStage < 4 -> {
+                        silenceStage = 4
+                        endCall()
+                    }
+                    quietFor >= FINAL_SILENCE_NUDGE_MS && silenceStage < 3 -> {
+                        silenceStage = 3
+                        client?.sendContextualUpdate("The user has been quiet for a while. Calmly say you'll let them go if they're busy. Keep it short and natural.")
+                    }
+                    quietFor >= SECOND_SILENCE_NUDGE_MS && silenceStage < 2 -> {
+                        silenceStage = 2
+                        client?.sendContextualUpdate("The user is still quiet. Gently check in once, not annoyed, not repetitive. Keep it short.")
+                    }
+                    quietFor >= FIRST_SILENCE_NUDGE_MS && silenceStage < 1 -> {
+                        silenceStage = 1
+                        client?.sendContextualUpdate("There has been a long silence. Casually check if the user is still there. Do not sound aggressive.")
+                    }
+                }
+            }
+        }
     }
 
     private fun startTimer() {
@@ -280,5 +379,10 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
         const val NEED_MIC = "__need_mic__"
         const val DEMO_NOTICE =
             "Demo mode: no ELEVENLABS_AGENT_ID set, so the call screen works but there's no live voice. See README."
+        private const val MIN_SILENCE_AFTER_AGENT_MS = 12_000L
+        private const val FIRST_SILENCE_NUDGE_MS = 18_000L
+        private const val SECOND_SILENCE_NUDGE_MS = 40_000L
+        private const val FINAL_SILENCE_NUDGE_MS = 70_000L
+        private const val HANGUP_AFTER_SILENCE_MS = 95_000L
     }
 }

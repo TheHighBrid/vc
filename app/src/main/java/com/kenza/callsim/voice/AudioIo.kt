@@ -41,8 +41,8 @@ class MicRecorder(private val onChunk: (ByteArray) -> Unit) {
         val minBuf = AudioRecord.getMinBufferSize(
             AudioConfig.SAMPLE_RATE, AudioConfig.CHANNEL_IN, AudioConfig.ENCODING
         )
-        // ~250 ms of audio per read keeps latency low without flooding the socket.
-        val chunkBytes = AudioConfig.SAMPLE_RATE / 4 * 2
+        // ~80 ms of audio per read reduces end-of-turn latency for live calls.
+        val chunkBytes = AudioConfig.SAMPLE_RATE * 80 / 1000 * 2
         val bufSize = maxOf(minBuf, chunkBytes)
 
         record = AudioRecord(
@@ -107,7 +107,7 @@ class PcmPlayer {
                     .setEncoding(AudioConfig.ENCODING)
                     .build()
             )
-            .setBufferSizeInBytes(maxOf(minBuf, AudioConfig.SAMPLE_RATE))
+            .setBufferSizeInBytes(maxOf(minBuf, AudioConfig.SAMPLE_RATE / 4))
             .setTransferMode(AudioTrack.MODE_STREAM)
             .build()
         track?.play()

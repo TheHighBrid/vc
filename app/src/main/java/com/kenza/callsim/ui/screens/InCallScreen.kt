@@ -1,6 +1,7 @@
 package com.kenza.callsim.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,9 +19,9 @@ import androidx.compose.material.icons.filled.CallEnd
 import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material.icons.filled.Dialpad
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.Videocam
-import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -63,6 +64,15 @@ fun InCallScreen(
         Text(state.contactName, color = Color.White, fontSize = 34.sp, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(6.dp))
         Text(statusLine(state), color = IOSColors.SecondaryLabel, fontSize = 17.sp)
+
+        if (state.phase == CallPhase.ACTIVE) {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = if (state.micStreaming) "🎙 mic streaming" else "⚠ waiting for mic…",
+                color = if (state.micStreaming) IOSColors.Green else Color(0xFFFFCC00),
+                fontSize = 13.sp
+            )
+        }
 
         if (state.lastAgentText.isNotEmpty() && state.phase == CallPhase.ACTIVE) {
             Spacer(Modifier.height(18.dp))
@@ -131,7 +141,7 @@ private fun ControlGrid(
             ControlItem(label = "keypad", icon = Icons.Filled.Dialpad, onClick = onToggleKeypad)
             ControlItem(
                 label = "speaker",
-                icon = Icons.Filled.VolumeUp,
+                icon = Icons.AutoMirrored.Filled.VolumeUp,
                 active = state.isSpeakerOn,
                 onClick = onToggleSpeaker
             )
@@ -185,12 +195,5 @@ private fun formatDuration(sec: Long): String {
     return "%02d:%02d".format(m, s)
 }
 
-@Composable
 private fun Modifier.clickableText(onClick: () -> Unit): Modifier =
-    this.then(
-        androidx.compose.foundation.clickable(
-            interactionSource = androidx.compose.runtime.remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-            indication = null,
-            onClick = onClick
-        )
-    )
+    this.clickable(onClick = onClick)

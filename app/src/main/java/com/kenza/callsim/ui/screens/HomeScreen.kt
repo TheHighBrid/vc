@@ -13,12 +13,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Backspace
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.PhoneCallback
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -42,6 +44,8 @@ fun HomeScreen(
     onDelete: () -> Unit,
     onCall: () -> Unit,
     onSimulateIncoming: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onOpenSchedule: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -51,7 +55,27 @@ fun HomeScreen(
             .padding(horizontal = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Spacer(Modifier.height(64.dp))
+        Spacer(Modifier.height(48.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "Schedule",
+                color = com.kenza.callsim.ui.theme.IOSColors.Blue,
+                fontSize = 15.sp,
+                modifier = Modifier.clickable(onClick = onOpenSchedule)
+            )
+            Spacer(Modifier.width(16.dp))
+            Icon(
+                Icons.Filled.Settings,
+                contentDescription = "Settings",
+                tint = Color.White,
+                modifier = Modifier.size(26.dp).clickable(onClick = onOpenSettings)
+            )
+        }
+        Spacer(Modifier.height(8.dp))
 
         // Contact name or the number being typed.
         Box(
@@ -71,9 +95,10 @@ fun HomeScreen(
 
         if (!state.isConfigured) {
             Text(
-                text = "Demo mode — add ELEVENLABS_AGENT_ID in local.properties for live voice",
+                text = "Demo mode — tap ⚙ Settings to add a free Gemini key (or ElevenLabs) for live voice",
                 color = IOSColors.SecondaryLabel,
                 fontSize = 12.sp,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 modifier = Modifier.padding(bottom = 4.dp)
             )
         }

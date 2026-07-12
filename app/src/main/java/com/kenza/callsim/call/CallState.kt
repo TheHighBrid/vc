@@ -22,6 +22,7 @@ data class CallUiState(
     val isSpeakerOn: Boolean = false,
     val isKeypadVisible: Boolean = false,
     val activity: AgentActivity = AgentActivity.IDLE,
+    val micStreaming: Boolean = false,
     val lastAgentText: String = "",
     val lastUserText: String = "",
     val errorMessage: String? = null,

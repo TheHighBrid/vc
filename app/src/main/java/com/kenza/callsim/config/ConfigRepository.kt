@@ -32,6 +32,17 @@ class ConfigRepository(context: Context) {
     private val prefs: SharedPreferences =
         context.applicationContext.getSharedPreferences("kenza_call_config", Context.MODE_PRIVATE)
 
+    init {
+        // One-time: drop the auto-pinned old native-audio default so the faster
+        // low-latency model takes over. A deliberate later choice still sticks.
+        if (!prefs.getBoolean("model_migrated_v2", false)) {
+            val saved = prefs.getString(KEY_GEMINI_MODEL, null)
+            val e = prefs.edit().putBoolean("model_migrated_v2", true)
+            if (saved != null && saved.contains("native-audio")) e.remove(KEY_GEMINI_MODEL)
+            e.apply()
+        }
+    }
+
     // ---- Which voice engine ----
     var provider: ProviderType
         get() = runCatching { ProviderType.valueOf(prefs.getString(KEY_PROVIDER, null) ?: "") }
@@ -47,7 +58,15 @@ class ConfigRepository(context: Context) {
     var geminiModel: String
         get() = prefs.getString(KEY_GEMINI_MODEL, null)?.takeIf { it.isNotBlank() }
             ?: GeminiLiveProvider.DEFAULT_MODEL
-        set(value) = prefs.edit().putString(KEY_GEMINI_MODEL, value.trim()).apply()
+        set(value) {
+            // Don't pin the current default — leave it unset so future default
+            // upgrades apply automatically. Only persist a deliberate override.
+            val v = value.trim()
+            val e = prefs.edit()
+            if (v.isEmpty() || v == GeminiLiveProvider.DEFAULT_MODEL) e.remove(KEY_GEMINI_MODEL)
+            else e.putString(KEY_GEMINI_MODEL, v)
+            e.apply()
+        }
 
     var geminiVoice: String
         get() = prefs.getString(KEY_GEMINI_VOICE, null)?.takeIf { it.isNotBlank() }

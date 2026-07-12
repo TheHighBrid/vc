@@ -16,28 +16,21 @@ object MemoryContext {
 
     fun build(store: MemoryStore, contactName: String, now: Long): String {
         val sb = StringBuilder()
-        sb.append("\n\n=== WHAT ").append(contactName.uppercase())
-            .append(" KNOWS RIGHT NOW (never recite this as a list — just KNOW it, ")
-            .append("and bring things up naturally, the way a person who remembers would) ===\n")
+        sb.append("\n\n=== YOU JUST KNOW THIS (don't recite; weave it in naturally) ===\n")
+        sb.append("NOW: ").append(temporal(now))
 
-        sb.append("\nTIME & PLACE IN LIFE:\n").append(temporal(now))
-
-        habits(store, now)?.let { sb.append("\nYOUR CALL RHYTHM:\n").append(it) }
+        habits(store, now)?.let { sb.append("RHYTHM: ").append(it) }
 
         val items = store.items()
         recall(items, now).takeIf { it.isNotBlank() }?.let {
-            sb.append("\nWHAT YOU REMEMBER ABOUT THEM:\n").append(it)
+            sb.append("REMEMBER ABOUT THEM:\n").append(it)
         }
         plans(items, now).takeIf { it.isNotBlank() }?.let {
-            sb.append("\nOPEN PLANS / THINGS THEY SAID THEY'D DO:\n").append(it)
+            sb.append("OPEN PLANS:\n").append(it)
         }
-
-        sb.append("\nHOW TO USE THIS: Reference the past (\"wait, didn't you say a couple weeks ago...\"), ")
-        sb.append("notice timing (\"it's late for you\", \"happy friday\"), and connect future plans ")
-        sb.append("(\"you could do that when you go next week\"). If they never did something they said they would, ")
-        sb.append("you can gently call it out. Don't force it, don't mention everything, and NEVER claim to ")
-        sb.append("remember something that isn't listed here. Forgetting small stuff is normal and fine.\n")
-        sb.append("=== END MEMORY ===\n")
+        sb.append("Reference the past/future when it fits; gently call out things they said they'd do. ")
+        sb.append("Never claim to remember anything not listed. Forgetting small stuff is fine.\n")
+        sb.append("=== END ===\n")
         return sb.toString()
     }
 
@@ -83,13 +76,12 @@ object MemoryContext {
             else -> "It's a mid-week day."
         }
 
-        return buildString {
-            append("- Right now it's $dayName, $dateStr, around $timeStr — the $partOfDay.\n")
-            append("- We're in $season, at $monthPhase.\n")
-            append("- $dayVibe\n")
-            if (!isWeekend && hour >= 22) append("- It's a late weeknight; they likely have things tomorrow.\n")
-            if (isWeekend) append("- It's the weekend, so there's more room to be easy and unhurried.\n")
+        val extra = when {
+            !isWeekend && hour >= 22 -> " Late weeknight — they've probably got stuff tomorrow."
+            isWeekend -> " It's the weekend, so it's easy and unhurried."
+            else -> ""
         }
+        return "$dayName $dateStr, ~$timeStr ($partOfDay), $season, $monthPhase. $dayVibe$extra\n"
     }
 
     // ---- call habits ----

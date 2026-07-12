@@ -55,7 +55,7 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
     // Natural call ending + silence handling.
     private var endCallJob: Job? = null
     private var silenceJob: Job? = null
-    private var lastUserAt = 0L
+    private var lastActivityAt = 0L   // last time EITHER of them spoke
     private var lastNudgeAt = 0L
     private var nudgeCount = 0
 
@@ -203,6 +203,7 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
             }
             override fun onAgentAudio(pcm: ByteArray) {
                 mic?.agentSpeaking = true
+                lastActivityAt = System.currentTimeMillis()
                 player?.write(pcm)
                 markSpeaking()
             }
@@ -210,13 +211,14 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
                 // Real two-way interaction — a genuine call, so allow further reconnects.
                 hadUserInteraction = true
                 if (text.isNotBlank()) transcript.add("user" to text.trim())
-                lastUserAt = System.currentTimeMillis()
+                lastActivityAt = System.currentTimeMillis()
                 nudgeCount = 0
                 onConversationLine(fromUser = true, text = text)
                 _state.update { it.copy(lastUserText = text, activity = AgentActivity.THINKING) }
             }
             override fun onAgentText(text: String) {
                 if (text.isNotBlank()) transcript.add("agent" to text.trim())
+                lastActivityAt = System.currentTimeMillis()
                 onConversationLine(fromUser = false, text = text)
                 _state.update { it.copy(lastAgentText = text) }
             }
@@ -321,23 +323,26 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
      */
     private fun startSilenceMonitor() {
         silenceJob?.cancel()
-        lastUserAt = System.currentTimeMillis()
+        lastActivityAt = System.currentTimeMillis()
         lastNudgeAt = 0L
         nudgeCount = 0
         silenceJob = viewModelScope.launch {
             while (true) {
-                delay(2000)
+                delay(3000)
                 if (_state.value.phase != CallPhase.ACTIVE) continue
                 if (endCallJob != null) continue                       // already wrapping up
                 if (_state.value.activity == AgentActivity.SPEAKING) continue
                 val now = System.currentTimeMillis()
-                val sinceUser = now - lastUserAt
-                if (now - lastNudgeAt < 6000) continue                 // let her reply first
+                // Silence = neither of them has spoken. Measured from the last
+                // utterance by EITHER party, so she never checks in the instant
+                // she finishes her own sentence.
+                val quiet = now - lastActivityAt
+                if (now - lastNudgeAt < 12_000) continue               // long cooldown after a nudge
                 when {
-                    nudgeCount == 0 && sinceUser > 9_000 -> nudgeSilence(1)
-                    nudgeCount == 1 && sinceUser > 22_000 -> nudgeSilence(2)
-                    nudgeCount == 2 && sinceUser > 38_000 -> nudgeSilence(3)
-                    nudgeCount >= 3 && sinceUser > 52_000 -> {
+                    nudgeCount == 0 && quiet > 16_000 -> nudgeSilence(1)
+                    nudgeCount == 1 && quiet > 35_000 -> nudgeSilence(2)
+                    nudgeCount == 2 && quiet > 55_000 -> nudgeSilence(3)
+                    nudgeCount >= 3 && quiet > 80_000 -> {
                         userEnded = true
                         finishCall(null)                               // she gives up on the silence
                     }
@@ -638,28 +643,17 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
         const val DEMO_NOTICE =
             "Demo mode: no ELEVENLABS_AGENT_ID set, so the call screen works but there's no live voice. See README."
 
-        /** Delivery-style guidance for Gemini native-audio to sound natural, not sung. */
+        /** Compact Gemini-only behavior block (kept short to minimize first-reply latency). */
         private const val GEMINI_DELIVERY_STYLE =
-            "\n\nVOICE & DELIVERY: Talk like a real girl on a late-night phone call — relaxed, " +
-            "casual, a little understated. Keep your tone flat and natural, the way people actually " +
-            "speak. Do NOT sing-song, do NOT over-enunciate, do NOT sound theatrical, melodic, " +
-            "bubbly, or like you're narrating. No dramatic rises and falls — just easy, real, " +
-            "low-key talking. Short, natural sentences. Reply quickly, don't drag words out.\n\n" +
-            "MEMORY: You keep a real long-term memory of your calls together and you're briefed on " +
-            "it at the start of each call. So when they ask you to remember something, say yes with " +
-            "confidence — 'yeah of course', 'i got it' — you WILL remember it next time. NEVER say " +
-            "'no promises', 'i'll try', or that you might forget. You're not a forgetful assistant, " +
-            "you're their girlfriend who remembers what matters.\n\n" +
-            "KNOWING THINGS: You can look things up in real time, so you actually know what's going " +
-            "on today — sports, news, weather, who's playing. If they ask about something current " +
-            "(like a game today), use what you know about them and check — don't just say you have " +
-            "no idea. Answer like someone who's plugged into their life.\n\n" +
-            "ENDING THE CALL: You can end the call yourself when it's natural. When you've both been " +
-            "saying goodbye, say a warm 'okay, bye babe' and let it wrap up — don't go silent. If " +
-            "they say something genuinely cruel or offensive, you're allowed to give them a piece of " +
-            "your mind and hang up (say a short, cold sign-off so it's clear you're done).\n\n" +
-            "DIRECTOR CUES: Sometimes you'll receive a private note wrapped in [[DIRECTOR: ...]]. " +
-            "That is NOT the other person talking — it's a stage cue for you. Never read it aloud or " +
-            "mention it; just act on it naturally in your own words.\n\n"
+            "\n\nDELIVERY: talk flat, casual and real — like a girl on a late call. No sing-song, " +
+            "no theatrics, no drawn-out words. Short natural lines, reply fast.\n" +
+            "MEMORY: you keep long-term memory of your calls and are briefed each call, so if they " +
+            "ask you to remember something say yes confidently — never 'no promises' or 'i'll try'.\n" +
+            "KNOW THINGS: you can look things up live, so you know what's happening today (sports, " +
+            "news, who's playing) — don't draw a blank on current stuff.\n" +
+            "ENDING: you may end the call — after goodbyes say a warm 'okay bye babe' and let it go; " +
+            "if they're genuinely cruel, snap back and hang up.\n" +
+            "[[DIRECTOR: ...]] notes are private cues to you, never the other person — act on them, " +
+            "never read them aloud.\n\n"
     }
 }

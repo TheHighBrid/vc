@@ -124,8 +124,9 @@ fun SettingsScreen(
             }
             Spacer(Modifier.height(8.dp))
             Field("Model (advanced)", geminiModel, { geminiModel = it },
-                "gemini-2.5-flash-native-audio-preview-12-2025",
-                "Change only if the default is unavailable. Alternatives: gemini-live-2.5-flash-preview, gemini-2.0-flash-live-001.")
+                "gemini-3.1-flash-live-preview",
+                "Default is the fast low-latency model. For a warmer (but slower) voice, try " +
+                    "gemini-2.5-flash-native-audio-preview-12-2025.")
         } else {
             Field("Agent ID", agentId, { agentId = it },
                 "ElevenLabs Conversational AI agent id",

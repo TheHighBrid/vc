@@ -35,8 +35,10 @@ class GeminiLiveProvider(
         private const val TAG = "GeminiLive"
         private const val HOST = "generativelanguage.googleapis.com"
         const val OUTPUT_SAMPLE_RATE = 24_000
-        // Native-audio live model (free tier, most realistic). Overridable in Settings.
-        const val DEFAULT_MODEL = "gemini-2.5-flash-native-audio-preview-12-2025"
+        // Low-latency live model — ~2x faster replies than native-audio, still
+        // free tier. Overridable in Settings. (Native-audio option:
+        // gemini-2.5-flash-native-audio-preview-12-2025 — warmer but slower.)
+        const val DEFAULT_MODEL = "gemini-3.1-flash-live-preview"
         const val DEFAULT_VOICE = "Callirrhoe" // easy-going female preset (flatter, less sing-song)
     }
 
@@ -47,6 +49,10 @@ class GeminiLiveProvider(
 
     @Volatile private var socket: WebSocket? = null
     @Volatile private var closedByUser = false
+    // Search grounding is the newest setup field; if the model rejects the setup
+    // (close 1007), reconnect once without it so the call still works.
+    @Volatile private var toolsEnabled = true
+    @Volatile private var retriedWithoutTools = false
 
     override fun start() {
         closedByUser = false
@@ -54,12 +60,16 @@ class GeminiLiveProvider(
             listener.onClosed("No Gemini API key set. Open Settings and paste your key.", fatal = true)
             return
         }
+        connect()
+    }
+
+    private fun connect() {
         val method = "google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent"
         val url = "wss://$HOST/ws/$method?key=${apiKey.trim()}"
         val req = Request.Builder().url(url).build()
         socket = http.newWebSocket(req, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                Log.i(TAG, "open; sending setup")
+                Log.i(TAG, "open; sending setup (tools=$toolsEnabled)")
                 webSocket.send(buildSetup().toString())
                 listener.onConnected()
             }
@@ -72,7 +82,16 @@ class GeminiLiveProvider(
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                if (!closedByUser) listener.onClosed(
+                if (closedByUser) return
+                // Setup rejected (unknown/unsupported field) — retry once without search.
+                if (code == 1007 && toolsEnabled && !retriedWithoutTools) {
+                    Log.w(TAG, "setup rejected ($reason); retrying without search")
+                    toolsEnabled = false
+                    retriedWithoutTools = true
+                    connect()
+                    return
+                }
+                listener.onClosed(
                     "closed ($code${if (reason.isNotBlank()) " $reason" else ""})",
                     fatal = isFatal(code, reason)
                 )
@@ -119,7 +138,9 @@ class GeminiLiveProvider(
             put("realtimeInputConfig", realtimeInput)
             // Google Search grounding so she can answer real-time questions
             // (who's playing today, news, weather) instead of drawing a blank.
-            put("tools", JSONArray().put(JSONObject().put("googleSearch", JSONObject())))
+            if (toolsEnabled) {
+                put("tools", JSONArray().put(JSONObject().put("googleSearch", JSONObject())))
+            }
             if (systemPrompt.isNotBlank()) {
                 put("systemInstruction", JSONObject().put(
                     "parts", JSONArray().put(JSONObject().put("text", systemPrompt))

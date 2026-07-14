@@ -1,8 +1,8 @@
-# Kenza Call — iOS-style call screen with a live AI voice (Android)
+# Call — iOS-style call screen with a live AI voice (Android)
 
 A native Android app that recreates the iPhone call experience — incoming-call
 ring screen, in-call control grid, and a working dial pad — and connects the
-call to a **live, two-way AI voice conversation** in Kenza's cloned voice.
+call to a **live, two-way AI voice conversation** in the cloned voice.
 
 The voice + brain are handled by an **ElevenLabs Conversational AI** agent:
 
@@ -10,7 +10,7 @@ The voice + brain are handled by an **ElevenLabs Conversational AI** agent:
   mic ──PCM──▶  ElevenLabs agent  ──PCM──▶  speaker
                  ├─ speech-to-text (your words)
                  ├─ LLM brain  (pick GPT or Gemini in the dashboard)
-                 └─ text-to-speech in Kenza's cloned voice
+                 └─ text-to-speech in voice cloned voice
 ```
 
 The Android app stays thin: it streams microphone audio up over a WebSocket and
@@ -51,9 +51,9 @@ use the app to deceive or impersonate her to others.
 
 ---
 
-## 1. Clone Kenza's voice in ElevenLabs
+## 1. Clone the voice in ElevenLabs
 
-1. Record a clean voice sample of Kenza (1–3 minutes, quiet room). With her consent.
+1. Record a clean voice sample of vvoice (1–3 minutes, quiet room). With her consent.
 2. In the ElevenLabs dashboard → **Voices → Add Voice → Instant Voice Clone**
    (or **Professional Voice Clone** for higher realism), upload the sample.
 3. Note the created **voice**.
@@ -61,10 +61,10 @@ use the app to deceive or impersonate her to others.
 ## 2. Create the Conversational AI agent
 
 1. Dashboard → **Conversational AI → Create Agent**.
-2. **Voice:** select Kenza's cloned voice.
+2. **Voice:** select a cloned voice.
 3. **LLM:** choose your brain — e.g. GPT-4o-mini / GPT-4o, or Gemini.
 4. **System prompt:** give it her persona, e.g.
-   > "You are Kenza, warm and playful. Keep replies short and natural, like a
+   > "You are ..., warm and playful. Keep replies short and natural, like a
    > real phone call. Speak in first person."
 5. **Audio output format:** set to **PCM 16000 Hz** (the app expects 16 kHz PCM).
 6. Save and copy the **Agent ID**.

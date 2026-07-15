@@ -83,7 +83,7 @@ Edit `local.properties`:
 ELEVENLABS_AGENT_ID=your_agent_id_here
 # only for a PRIVATE agent:
 # ELEVENLABS_API_KEY=your_api_key_here
-CONTACT_NAME=Kenza
+CONTACT_NAME=Luna
 ```
 
 `local.properties` is git-ignored, so keys never get committed. They're injected
@@ -106,7 +106,7 @@ you start a real call).
 
 - **Outgoing:** type any number (it's a simulation) → tap the green call button.
 - **Incoming:** tap **Simulate incoming call** → hear the ring → **Accept**.
-- Once connected, just talk — Kenza replies live. Use **mute** / **speaker** /
+- Once connected, just talk — Luna replies live. Use **mute** / **speaker** /
   **keypad** as on a real iPhone; the red button ends the call.
 
 ---
@@ -114,7 +114,7 @@ you start a real call).
 ## Project layout
 
 ```
-app/src/main/java/com/kenza/callsim/
+app/src/main/java/com/Luna/callsim/
 ├─ MainActivity.kt            # hosts Compose UI, requests mic permission
 ├─ call/
 │  ├─ CallViewModel.kt        # call state machine + audio routing + session

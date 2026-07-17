@@ -1,4 +1,4 @@
-# Call — iOS-style call screen with a live AI voice (Android)
+# Allo
 
 A native Android app that recreates the iPhone call experience — incoming-call
 ring screen, in-call control grid, and a working dial pad — and connects the
@@ -114,7 +114,7 @@ you start a real call).
 ## Project layout
 
 ```
-app/src/main/java/com/Luna/callsim/
+app/src/main/java/com/Kenza/callsim/
 ├─ MainActivity.kt            # hosts Compose UI, requests mic permission
 ├─ call/
 │  ├─ CallViewModel.kt        # call state machine + audio routing + session

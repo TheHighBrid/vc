@@ -35,11 +35,10 @@ class GeminiLiveProvider(
         private const val TAG = "GeminiLive"
         private const val HOST = "generativelanguage.googleapis.com"
         const val OUTPUT_SAMPLE_RATE = 24_000
-        // Low-latency live model — ~2x faster replies than native-audio, still
-        // free tier. Overridable in Settings. (Native-audio option:
-        // gemini-2.5-flash-native-audio-preview-12-2025 — warmer but slower.)
+        // Low-latency live model. Kore is firmer and plainer than the brighter
+        // presets, which keeps the phone call from sounding too cheerful.
         const val DEFAULT_MODEL = "gemini-3.1-flash-live-preview"
-        const val DEFAULT_VOICE = "Kore" // firmer, plainer preset; less sing-song for phone calls
+        const val DEFAULT_VOICE = "Kore"
     }
 
     private val http = OkHttpClient.Builder()
@@ -118,9 +117,9 @@ class GeminiLiveProvider(
         val genConfig = JSONObject().apply {
             put("responseModalities", JSONArray().put("AUDIO"))
             put("speechConfig", speech)
-            // Higher temperature = more varied, less repetitive/canned replies.
-            put("temperature", 1.05)
-            put("topP", 0.9)
+            // Lower temperature keeps her grounded and less performative.
+            put("temperature", 0.82)
+            put("topP", 0.82)
         }
         // Respond quickly: detect end-of-turn sooner after the user stops, so she
         // doesn't sit in silence before replying. HIGH end-sensitivity + a short

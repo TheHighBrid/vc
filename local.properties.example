@@ -4,12 +4,17 @@
 # --- Android SDK (Android Studio fills this in automatically) ---
 # sdk.dir=/Users/you/Library/Android/sdk
 
-# --- ElevenLabs Conversational AI ---
-# Required: the agent that speaks in Kenza's cloned voice.
+# --- Gemini Live: primary daily voice engine ---
+# Recommended for normal calls and required for automatic post-call memory summaries.
+# You can also enter this key directly in the app Settings screen.
+GEMINI_API_KEY=
+
+# --- ElevenLabs: optional compatibility engine ---
+# Keep blank unless you deliberately want to test the paid cloned-voice provider.
 ELEVENLABS_AGENT_ID=
 
-# Required only if the agent is PRIVATE (auth enabled). For a public agent,
-# leave this blank. Never ship a real key in a production app.
+# Required only if the optional ElevenLabs agent is PRIVATE.
+# Never ship a real provider key in a public production APK.
 ELEVENLABS_API_KEY=
 
 # Optional: name shown on the call screen (defaults to "Kenza").

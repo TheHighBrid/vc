@@ -53,7 +53,7 @@ use the app to deceive or impersonate her to others.
 
 ## 1. Clone the voice in ElevenLabs
 
-1. Record a clean voice sample of vvoice (1–3 minutes, quiet room). With her consent.
+1. Record a clean voice sample of voice (1–3 minutes, quiet room). With her consent.
 2. In the ElevenLabs dashboard → **Voices → Add Voice → Instant Voice Clone**
    (or **Professional Voice Clone** for higher realism), upload the sample.
 3. Note the created **voice**.

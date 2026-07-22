@@ -2,33 +2,33 @@ package com.kenza.callsim.voice
 
 import android.annotation.SuppressLint
 import android.media.AudioAttributes
+import android.media.AudioDeviceInfo
 import android.media.AudioFormat
-import android.media.AudioManager
 import android.media.AudioRecord
 import android.media.AudioTrack
 import android.media.MediaRecorder
 import android.media.audiofx.AcousticEchoCanceler
 import android.media.audiofx.AutomaticGainControl
 import android.media.audiofx.NoiseSuppressor
+import android.os.Build
 import android.util.Log
 import kotlin.concurrent.thread
 
-/**
- * Audio constants shared by capture + playback.
- * ElevenLabs Conversational AI expects 16 kHz, mono, signed 16-bit PCM in,
- * and (by default) returns 16 kHz mono PCM out.
- */
+/** Shared PCM format used by both supported live providers. */
 object AudioConfig {
     const val SAMPLE_RATE = 16_000
     const val CHANNEL_IN = AudioFormat.CHANNEL_IN_MONO
     const val CHANNEL_OUT = AudioFormat.CHANNEL_OUT_MONO
     const val ENCODING = AudioFormat.ENCODING_PCM_16BIT
+    const val BYTES_PER_SAMPLE = 2
+    const val INPUT_CHUNK_BYTES =
+        SAMPLE_RATE * GeminiLiveTuning.INPUT_CHUNK_MS / 1_000 * BYTES_PER_SAMPLE
 }
 
 /**
- * Captures microphone audio as raw PCM and hands each chunk to [onChunk]
- * on a background thread. Honors a mute flag so the user can silence the mic
- * without tearing down the session.
+ * Captures 16 kHz mono PCM and forwards small chunks immediately. Speaker and
+ * earpiece routes remain echo-safe half duplex, while headset microphone routes
+ * stay full duplex so the user can genuinely interrupt Gemini mid-sentence.
  */
 class MicRecorder(
     private val onChunk: (ByteArray) -> Unit,
@@ -37,13 +37,6 @@ class MicRecorder(
 ) {
 
     @Volatile var muted: Boolean = false
-
-    /**
-     * True while the agent is actively speaking. We stop forwarding mic audio
-     * (half-duplex) so the agent's own voice coming out of the speaker isn't
-     * captured and mistaken for the user talking — which otherwise makes the
-     * server interrupt and cut off every reply after the greeting.
-     */
     @Volatile var agentSpeaking: Boolean = false
 
     private var record: AudioRecord? = null
@@ -52,62 +45,79 @@ class MicRecorder(
     private var aec: AcousticEchoCanceler? = null
     private var ns: NoiseSuppressor? = null
     private var agc: AutomaticGainControl? = null
+    private var lastRouteType: Int? = null
 
-    @SuppressLint("MissingPermission") // caller guarantees RECORD_AUDIO is granted
+    @SuppressLint("MissingPermission")
     fun start() {
         if (running) return
-        val minBuf = AudioRecord.getMinBufferSize(
-            AudioConfig.SAMPLE_RATE, AudioConfig.CHANNEL_IN, AudioConfig.ENCODING
+        val minBuffer = AudioRecord.getMinBufferSize(
+            AudioConfig.SAMPLE_RATE,
+            AudioConfig.CHANNEL_IN,
+            AudioConfig.ENCODING,
         )
-        if (minBuf <= 0) {
+        if (minBuffer <= 0) {
             onError("This device can't record 16 kHz mono audio.")
             return
         }
-        // ~100 ms of audio per read keeps the Live API fed in near real time.
-        // 250 ms chunks made the user's speech arrive in lumpy batches, which
-        // was a big part of the 3-4 second "thinking" gap.
-        val chunkBytes = AudioConfig.SAMPLE_RATE / 10 * 2
-        val bufSize = maxOf(minBuf, chunkBytes)
 
-        // Some devices/ROMs fail to open VOICE_COMMUNICATION (AEC) capture; fall
-        // back to the plain mic so we always have an input source.
+        // The AudioRecord allocation may be larger, but each network write stays
+        // exactly 40 ms so Gemini receives a smooth realtime stream.
+        val chunkBytes = AudioConfig.INPUT_CHUNK_BYTES
+        val bufferSize = maxOf(minBuffer, chunkBytes * 2)
+
         val sources = intArrayOf(
             MediaRecorder.AudioSource.VOICE_COMMUNICATION,
             MediaRecorder.AudioSource.MIC,
             MediaRecorder.AudioSource.DEFAULT,
         )
-        for (src in sources) {
-            val r = runCatching {
-                AudioRecord(src, AudioConfig.SAMPLE_RATE, AudioConfig.CHANNEL_IN, AudioConfig.ENCODING, bufSize)
+        for (source in sources) {
+            val candidate = runCatching {
+                AudioRecord(
+                    source,
+                    AudioConfig.SAMPLE_RATE,
+                    AudioConfig.CHANNEL_IN,
+                    AudioConfig.ENCODING,
+                    bufferSize,
+                )
             }.getOrNull()
-            if (r != null && r.state == AudioRecord.STATE_INITIALIZED) {
-                record = r
-                Log.i(TAG, "AudioRecord initialized with source=$src")
+            if (candidate != null && candidate.state == AudioRecord.STATE_INITIALIZED) {
+                record = candidate
+                Log.i(TAG, "AudioRecord initialized with source=$source chunkMs=${GeminiLiveTuning.INPUT_CHUNK_MS}")
                 break
             }
-            runCatching { r?.release() }
+            runCatching { candidate?.release() }
         }
         if (record == null) {
             onError("Microphone is unavailable (couldn't open an audio input).")
             return
         }
 
-        // Attach platform echo cancellation / noise suppression so the speaker
-        // output doesn't leak back into the mic. Best-effort: not all devices
-        // support these, and they're harmless when absent.
         record?.audioSessionId?.let { session ->
-            if (AcousticEchoCanceler.isAvailable())
-                aec = runCatching { AcousticEchoCanceler.create(session)?.apply { enabled = true } }.getOrNull()
-            if (NoiseSuppressor.isAvailable())
-                ns = runCatching { NoiseSuppressor.create(session)?.apply { enabled = true } }.getOrNull()
-            if (AutomaticGainControl.isAvailable())
-                agc = runCatching { AutomaticGainControl.create(session)?.apply { enabled = true } }.getOrNull()
+            if (AcousticEchoCanceler.isAvailable()) {
+                aec = runCatching {
+                    AcousticEchoCanceler.create(session)?.apply { enabled = true }
+                }.getOrNull()
+            }
+            if (NoiseSuppressor.isAvailable()) {
+                ns = runCatching {
+                    NoiseSuppressor.create(session)?.apply { enabled = true }
+                }.getOrNull()
+            }
+            if (AutomaticGainControl.isAvailable()) {
+                agc = runCatching {
+                    AutomaticGainControl.create(session)?.apply { enabled = true }
+                }.getOrNull()
+            }
             Log.i(TAG, "effects aec=${aec != null} ns=${ns != null} agc=${agc != null}")
         }
 
         running = true
         runCatching { record?.startRecording() }
-            .onFailure { onError("Couldn't start the microphone: ${it.message}"); running = false; return }
+            .onFailure {
+                onError("Couldn't start the microphone: ${it.message}")
+                running = false
+                return
+            }
 
         var announced = false
         worker = thread(name = "mic-recorder") {
@@ -115,10 +125,14 @@ class MicRecorder(
             while (running) {
                 val read = record?.read(buffer, 0, buffer.size) ?: -1
                 if (read > 0) {
-                    if (!announced) { announced = true; onStreaming() }
-                    // Drain the buffer always, but only forward when it's the
-                    // user's turn (not muted, agent not speaking).
-                    if (!muted && !agentSpeaking) onChunk(buffer.copyOf(read))
+                    if (!announced) {
+                        announced = true
+                        onStreaming()
+                    }
+                    val headsetFullDuplex = routedInputSupportsBargeIn()
+                    if (!muted && (!agentSpeaking || headsetFullDuplex)) {
+                        onChunk(buffer.copyOf(read))
+                    }
                 } else if (read < 0) {
                     onError("Microphone read error ($read).")
                     break
@@ -127,32 +141,57 @@ class MicRecorder(
         }
     }
 
+    /**
+     * A dedicated headset mic is physically separated from the phone speaker, so
+     * streaming it while Gemini speaks is safe and enables true barge-in. Built-in
+     * mic routes remain gated to prevent the agent interrupting itself.
+     */
+    private fun routedInputSupportsBargeIn(): Boolean {
+        val type = record?.routedDevice?.type ?: return false
+        if (lastRouteType != type) {
+            lastRouteType = type
+            Log.i(TAG, "input route type=$type fullDuplex=${isHeadsetInput(type)}")
+        }
+        return isHeadsetInput(type)
+    }
+
+    private fun isHeadsetInput(type: Int): Boolean = when (type) {
+        AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
+        AudioDeviceInfo.TYPE_WIRED_HEADSET,
+        AudioDeviceInfo.TYPE_USB_HEADSET -> true
+        else -> Build.VERSION.SDK_INT >= 31 && type == AudioDeviceInfo.TYPE_BLE_HEADSET
+    }
+
     fun stop() {
         running = false
         worker?.join(500)
         worker = null
-        runCatching { aec?.release() }; aec = null
-        runCatching { ns?.release() }; ns = null
-        runCatching { agc?.release() }; agc = null
+        runCatching { aec?.release() }
+        aec = null
+        runCatching { ns?.release() }
+        ns = null
+        runCatching { agc?.release() }
+        agc = null
         runCatching { record?.stop() }
         record?.release()
         record = null
     }
 }
 
-/**
- * Streams raw PCM coming back from the agent to the speaker/earpiece.
- * [flush] is used on interruptions so the agent stops mid-sentence instantly.
- */
+/** Streams agent PCM to the phone audio route with a deliberately short queue. */
 class PcmPlayer(private val sampleRate: Int = AudioConfig.SAMPLE_RATE) {
 
     private var track: AudioTrack? = null
 
     fun start() {
         if (track != null) return
-        val minBuf = AudioTrack.getMinBufferSize(
-            sampleRate, AudioConfig.CHANNEL_OUT, AudioConfig.ENCODING
+        val minimumBuffer = AudioTrack.getMinBufferSize(
+            sampleRate,
+            AudioConfig.CHANNEL_OUT,
+            AudioConfig.ENCODING,
         )
+        val targetBuffer =
+            sampleRate * GeminiLiveTuning.OUTPUT_BUFFER_MS / 1_000 * AudioConfig.BYTES_PER_SAMPLE
         track = AudioTrack.Builder()
             .setAudioAttributes(
                 AudioAttributes.Builder()
@@ -167,9 +206,7 @@ class PcmPlayer(private val sampleRate: Int = AudioConfig.SAMPLE_RATE) {
                     .setEncoding(AudioConfig.ENCODING)
                     .build()
             )
-            // Keep the output queue short; a one-second buffer makes the agent
-            // feel delayed even when Gemini starts streaming quickly.
-            .setBufferSizeInBytes(maxOf(minBuf, sampleRate / 4 * 2))
+            .setBufferSizeInBytes(maxOf(minimumBuffer, targetBuffer))
             .setTransferMode(AudioTrack.MODE_STREAM)
             .build()
         track?.play()
@@ -179,7 +216,7 @@ class PcmPlayer(private val sampleRate: Int = AudioConfig.SAMPLE_RATE) {
         track?.write(pcm, 0, pcm.size)
     }
 
-    /** Drop everything queued — used when the user interrupts the agent. */
+    /** Immediately discard unsounded speech when Gemini reports interruption. */
     fun flush() {
         runCatching {
             track?.pause()

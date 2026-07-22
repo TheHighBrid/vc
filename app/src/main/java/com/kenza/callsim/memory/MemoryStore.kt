@@ -3,107 +3,236 @@ package com.kenza.callsim.memory
 import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
-
-enum class MemoryKind { FACT, PREFERENCE, EVENT, PLAN }
-
-/**
- * One durable thing Kenza remembers. [importance] 1..5 controls what survives
- * pruning and what she leans on. [dueAt] marks a future plan/promise; [done]
- * flags it resolved.
- */
-data class MemoryItem(
-    val id: String,
-    val kind: MemoryKind,
-    val text: String,
-    val createdAt: Long,
-    val importance: Int = 3,
-    val dueAt: Long? = null,
-    val done: Boolean = false,
-) {
-    fun toJson(): JSONObject = JSONObject().apply {
-        put("id", id); put("kind", kind.name); put("text", text)
-        put("createdAt", createdAt); put("importance", importance)
-        dueAt?.let { put("dueAt", it) }; put("done", done)
-    }
-
-    companion object {
-        fun fromJson(o: JSONObject) = MemoryItem(
-            id = o.optString("id"),
-            kind = runCatching { MemoryKind.valueOf(o.optString("kind")) }.getOrDefault(MemoryKind.FACT),
-            text = o.optString("text"),
-            createdAt = o.optLong("createdAt"),
-            importance = o.optInt("importance", 3),
-            dueAt = if (o.has("dueAt")) o.optLong("dueAt") else null,
-            done = o.optBoolean("done", false),
-        )
-    }
-}
+import java.util.UUID
+import kotlin.math.max
 
 /**
- * Persistent long-term memory: durable items plus a lightweight call log used
- * to learn call habits (usual time, days since last talk).
+ * Encrypted app-local memory store. It preserves durable memories, compact
+ * post-call summaries, editable profiles, plans and unresolved topics. Raw call
+ * transcripts are intentionally not persisted.
  */
 class MemoryStore(context: Context) {
 
-    private val prefs =
-        context.applicationContext.getSharedPreferences("kenza_memory", Context.MODE_PRIVATE)
+    private val appContext = context.applicationContext
+    private val storage = SecureMemoryStorage(appContext)
+    private val legacyPrefs = appContext.getSharedPreferences("kenza_memory", Context.MODE_PRIVATE)
 
-    // ---- durable items -------------------------------------------------------
-
-    fun items(): List<MemoryItem> {
-        val raw = prefs.getString(KEY_ITEMS, null) ?: return emptyList()
-        return runCatching {
-            val arr = JSONArray(raw)
-            (0 until arr.length()).map { MemoryItem.fromJson(arr.getJSONObject(it)) }
-        }.getOrDefault(emptyList())
-    }
-
-    fun save(list: List<MemoryItem>) {
-        val arr = JSONArray()
-        list.forEach { arr.put(it.toJson()) }
-        prefs.edit().putString(KEY_ITEMS, arr.toString()).apply()
-    }
-
-    /** Add items, skipping near-duplicates, keeping the store bounded. */
     @Synchronized
-    fun addAll(new: List<MemoryItem>) {
-        if (new.isEmpty()) return
-        val existing = items().toMutableList()
-        val seen = existing.map { it.text.trim().lowercase() }.toMutableSet()
-        for (item in new) {
-            val k = item.text.trim().lowercase()
-            if (k.isEmpty() || k in seen) continue
-            seen += k
-            existing += item
+    fun snapshot(): MemorySnapshot = readState()
+
+    fun items(): List<MemoryItem> = snapshot().items
+
+    fun callSummaries(): List<CallSummary> = snapshot().calls.sortedByDescending { it.startedAt }
+
+    fun profiles(): PersonalityProfiles = snapshot().profiles
+
+    @Synchronized
+    fun saveProfiles(profiles: PersonalityProfiles) {
+        val current = readState()
+        writeState(current.copy(profiles = profiles.copy(updatedAt = System.currentTimeMillis())))
+    }
+
+    /** Compatibility method retained for existing callers. */
+    @Synchronized
+    fun save(list: List<MemoryItem>) {
+        val state = readState()
+        writeState(state.copy(items = prune(list)))
+    }
+
+    /** Adds memories while merging exact and strong near-duplicates. */
+    @Synchronized
+    fun addAll(new: List<MemoryItem>): List<String> {
+        if (new.isEmpty()) return emptyList()
+        val state = readState()
+        val existing = state.items.toMutableList()
+        val storedIds = mutableListOf<String>()
+        val now = System.currentTimeMillis()
+
+        for (candidate in new) {
+            val clean = candidate.text.trim().replace(Regex("\\s+"), " ").take(500)
+            if (clean.isBlank()) continue
+            val incoming = candidate.copy(text = clean, updatedAt = max(candidate.updatedAt, now))
+            val index = existing.indexOfFirst { MemoryPolicy.isNearDuplicate(it.text, clean) }
+            if (index >= 0) {
+                val old = existing[index]
+                val merged = old.copy(
+                    kind = if (incoming.kind == MemoryKind.CORRECTION) incoming.kind else old.kind,
+                    owner = if (old.owner == MemoryOwner.USER) incoming.owner else old.owner,
+                    text = if (incoming.kind == MemoryKind.CORRECTION) incoming.text else old.text,
+                    updatedAt = now,
+                    importance = max(old.importance, incoming.importance),
+                    confidence = max(old.confidence, incoming.confidence),
+                    dueAt = incoming.dueAt ?: old.dueAt,
+                    done = if (incoming.kind == MemoryKind.CORRECTION) incoming.done else old.done,
+                    pinned = old.pinned || incoming.pinned,
+                    sourceCallId = incoming.sourceCallId ?: old.sourceCallId,
+                )
+                existing[index] = merged
+                storedIds += merged.id
+            } else {
+                existing += incoming
+                storedIds += incoming.id
+            }
         }
-        // Keep the 200 most useful (importance first, then recency).
-        val pruned = existing.sortedWith(
-            compareByDescending<MemoryItem> { it.importance }.thenByDescending { it.createdAt }
-        ).take(200)
-        save(pruned)
+        writeState(state.copy(items = prune(existing)))
+        return storedIds.distinct()
     }
 
-    // ---- call log ------------------------------------------------------------
-
-    /** Epoch-millis start times of past calls (most recent last), capped. */
-    fun callTimes(): List<Long> {
-        val raw = prefs.getString(KEY_CALLS, null) ?: return emptyList()
-        return runCatching {
-            val arr = JSONArray(raw)
-            (0 until arr.length()).map { arr.getLong(it) }
-        }.getOrDefault(emptyList())
+    @Synchronized
+    fun addManualMemory(
+        text: String,
+        owner: MemoryOwner,
+        kind: MemoryKind,
+        importance: Int = 4,
+    ): String? {
+        val clean = text.trim()
+        if (clean.isEmpty()) return null
+        val now = System.currentTimeMillis()
+        return addAll(
+            listOf(
+                MemoryItem(
+                    id = UUID.randomUUID().toString(),
+                    kind = kind,
+                    owner = owner,
+                    text = clean,
+                    createdAt = now,
+                    updatedAt = now,
+                    importance = importance.coerceIn(1, 5),
+                    confidence = 1.0,
+                )
+            )
+        ).firstOrNull()
     }
 
+    @Synchronized
+    fun deleteMemory(id: String) {
+        val state = readState()
+        writeState(state.copy(items = state.items.filterNot { it.id == id }))
+    }
+
+    @Synchronized
+    fun togglePinned(id: String) {
+        val now = System.currentTimeMillis()
+        val state = readState()
+        writeState(state.copy(items = state.items.map {
+            if (it.id == id) it.copy(pinned = !it.pinned, updatedAt = now) else it
+        }))
+    }
+
+    @Synchronized
+    fun toggleDone(id: String) {
+        val now = System.currentTimeMillis()
+        val state = readState()
+        writeState(state.copy(items = state.items.map {
+            if (it.id == id) it.copy(done = !it.done, updatedAt = now) else it
+        }))
+    }
+
+    /** Starts a pending record that the extractor completes after hang-up. */
     @Synchronized
     fun recordCall(startedAt: Long) {
-        val list = (callTimes() + startedAt).takeLast(100)
-        val arr = JSONArray()
-        list.forEach { arr.put(it) }
-        prefs.edit().putString(KEY_CALLS, arr.toString()).apply()
+        val state = readState()
+        if (state.calls.any { it.startedAt == startedAt }) return
+        val pending = CallSummary(
+            id = UUID.randomUUID().toString(),
+            startedAt = startedAt,
+            endedAt = System.currentTimeMillis(),
+            summary = "Creating memory summary…",
+            processing = true,
+        )
+        writeState(state.copy(calls = (state.calls + pending).sortedBy { it.startedAt }.takeLast(MAX_CALLS)))
+    }
+
+    @Synchronized
+    fun completeLatestCall(
+        endedAt: Long,
+        summary: String,
+        mood: String,
+        highlights: List<String>,
+        unresolvedTopics: List<String>,
+        followUp: String?,
+        memoryIds: List<String>,
+        error: String? = null,
+    ) {
+        val state = readState()
+        val index = state.calls.indexOfLast { it.processing }
+        if (index < 0) return
+        val calls = state.calls.toMutableList()
+        val old = calls[index]
+        calls[index] = old.copy(
+            endedAt = endedAt,
+            summary = summary.trim().take(1600),
+            mood = mood.trim().take(120),
+            highlights = highlights.cleanMemoryList(8),
+            unresolvedTopics = unresolvedTopics.cleanMemoryList(8),
+            followUp = followUp?.trim()?.take(500),
+            memoryIds = memoryIds.distinct(),
+            processing = false,
+            processingError = error,
+        )
+        writeState(state.copy(calls = calls.sortedBy { it.startedAt }.takeLast(MAX_CALLS)))
+    }
+
+    fun callTimes(): List<Long> = snapshot().calls.map { it.startedAt }.filter { it > 0 }.sorted()
+
+    @Synchronized
+    fun deleteCall(id: String) {
+        val state = readState()
+        writeState(state.copy(calls = state.calls.filterNot { it.id == id }))
+    }
+
+    @Synchronized
+    fun clearAll() {
+        storage.clear()
+        writeState(MemorySnapshot(updatedAt = System.currentTimeMillis()))
+    }
+
+    private fun readState(): MemorySnapshot {
+        storage.read()?.let { raw ->
+            runCatching { MemorySnapshot.fromJson(JSONObject(raw)) }.getOrNull()?.let { return it }
+        }
+        val migrated = migrateLegacy()
+        storage.write(migrated.toJson().toString())
+        return migrated
+    }
+
+    private fun writeState(state: MemorySnapshot) {
+        storage.write(state.copy(updatedAt = System.currentTimeMillis()).toJson().toString())
+    }
+
+    /** Imports the v1 SharedPreferences data on first launch after upgrade. */
+    private fun migrateLegacy(): MemorySnapshot {
+        val items = runCatching {
+            val arr = JSONArray(legacyPrefs.getString("items", "[]"))
+            (0 until arr.length()).mapNotNull { index ->
+                arr.optJSONObject(index)?.let(MemoryItem::fromJson)
+            }
+        }.getOrDefault(emptyList())
+        val oldTimes = runCatching {
+            val arr = JSONArray(legacyPrefs.getString("calls", "[]"))
+            (0 until arr.length()).map { arr.optLong(it) }.filter { it > 0 }
+        }.getOrDefault(emptyList())
+        val calls = oldTimes.takeLast(MAX_CALLS).map { time ->
+            CallSummary(
+                id = UUID.randomUUID().toString(),
+                startedAt = time,
+                endedAt = time,
+                summary = "Previous call. A detailed summary was not available in the older memory format.",
+            )
+        }
+        return MemorySnapshot(items = prune(items), calls = calls, updatedAt = System.currentTimeMillis())
+    }
+
+    private fun prune(items: List<MemoryItem>): List<MemoryItem> {
+        val now = System.currentTimeMillis()
+        return items
+            .filter { it.text.isNotBlank() }
+            .sortedByDescending { MemoryPolicy.score(it, now) }
+            .take(MAX_MEMORIES)
     }
 
     private companion object {
-        const val KEY_ITEMS = "items"
-        const val KEY_CALLS = "calls"
+        const val MAX_MEMORIES = 400
+        const val MAX_CALLS = 60
     }
 }

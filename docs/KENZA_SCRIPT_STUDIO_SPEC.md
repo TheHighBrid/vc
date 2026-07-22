@@ -26,22 +26,22 @@ The result must not sound like:
 
 ## 2. Core user flow
 
-1. The user opens Script Studio from Allo's home experience.
-2. The user creates or resumes a script project.
-3. The user chooses duration, mode, language, mood, topics, memories, boundaries, and ending style.
-4. The app validates the request.
-5. The app assembles Kenza's shared context and retrieves relevant memories.
-6. The app generates the script through a provider-neutral generator.
-7. The user reviews and edits the result.
-8. The user may regenerate the full script or selected segment.
-9. The user saves, duplicates, renames, or deletes the project.
-10. The user copies or exports clean TTS text and structured production metadata.
-11. When configured, the user may render or play the script with an approved TTS provider.
-12. Candidate memories are reviewed before durable storage.
+1. Open Script Studio from Allo's home experience.
+2. Create or resume a script project.
+3. Choose duration, mode, language, mood, topics, memories, boundaries, and ending style.
+4. Validate the request before provider usage.
+5. Assemble Kenza's shared context and retrieve relevant memories.
+6. Generate through a provider-neutral generator.
+7. Review and edit the result.
+8. Regenerate the full script or a selected segment.
+9. Save, duplicate, rename, or delete the project.
+10. Copy or export clean TTS text and structured production metadata.
+11. Render or play the script with an approved TTS provider when configured.
+12. Review candidate memories before durable storage.
 
 ## 3. Recommended package layout
 
-Adapt these names to the current repository rather than forcing an unnecessary rewrite.
+Adapt these names to the current repository. Do not force an unnecessary rewrite.
 
 ```text
 app/src/main/java/com/kenza/callsim/
@@ -87,7 +87,7 @@ A smaller MVP may use fewer files. Keep state ownership and responsibilities cle
 
 ## 4. Domain models
 
-The following shapes are recommended starting points.
+Recommended starting shapes:
 
 ```kotlin
 enum class ScriptMode {
@@ -112,7 +112,7 @@ data class ScriptRequest(
     val language: String,
     val timeOfDay: String?,
     val seasonOrDate: String?,
-    val kenzoLocation: String?,
+    val kenzaLocation: String?,
     val listenerLocation: String?,
     val relationshipStage: String?,
     val relationshipMood: String?,
@@ -122,7 +122,7 @@ data class ScriptRequest(
     val selectedMemoryIds: List<String>,
     val currentProblems: List<String>,
     val futurePlans: List<String>,
-    val kenzoMood: String?,
+    val kenzaMood: String?,
     val listenerLikelyMood: String?,
     val affection: IntensityLevel,
     val humor: IntensityLevel,
@@ -158,7 +158,7 @@ data class ScriptResult(
 )
 ```
 
-Use `Kenza`, not `Kenzo`, in production names. Any code sample typo must be corrected during implementation.
+Use current repository conventions for IDs, serialization, state, and persistence.
 
 ## 5. Request validation
 
@@ -171,8 +171,8 @@ Required rules:
 - Custom mode requires a scenario or call reason.
 - Empty optional fields are allowed.
 - The app must not require private personal facts.
-- The app must reject or safely handle requests intended for fraud, deceptive impersonation, authentication, false evidence, coercion, or non-consensual voice use.
-- The app must clearly state that generated audio is synthetic when disclosure is required.
+- Reject or safely handle requests intended for fraud, deceptive impersonation, authentication, false evidence, coercion, or non-consensual voice use.
+- Clearly state that generated audio is synthetic when disclosure is required.
 
 Validation errors must be specific and actionable.
 
@@ -184,8 +184,6 @@ Total duration is:
 
 Use an adjustable spoken rate, initially around 135 to 155 words per minute for conversational delivery.
 
-Suggested planning ranges:
-
 | Requested duration | Kenza words | Listener time |
 |---|---:|---:|
 | 10 minutes | 650 to 950 | 30% to 45% |
@@ -194,7 +192,7 @@ Suggested planning ranges:
 | 30 minutes | 2,000 to 2,900 | 30% to 45% |
 | 45 minutes | 3,000 to 4,300 | 30% to 45% |
 
-Do not pad with repetitive phrases.
+These are planning ranges, not padding targets.
 
 The duration estimator should parse pause directions such as:
 
@@ -211,7 +209,7 @@ Return both:
 - Estimated Kenza speaking time
 - Estimated total call duration
 
-Show a warning when the result differs materially from the requested duration.
+Warn when the result differs materially from the requested duration.
 
 ## 7. One-sided dialogue rules
 
@@ -222,7 +220,7 @@ Reject or flag patterns such as:
 - `Mohamed:`
 - `Listener:`
 - `User:`
-- `Kenza:` when speaker labels are not part of production metadata
+- Speaker labels inside spoken text
 - Quoted listener replies
 - Full paraphrases of the listener's invisible answer
 
@@ -246,7 +244,7 @@ A validator should produce warnings rather than silently deleting meaningful tex
 
 ## 8. Prompt composition
 
-The prompt composer should build structured sections rather than one enormous undifferentiated prompt.
+Build structured sections rather than one enormous undifferentiated prompt.
 
 Recommended order:
 
@@ -265,7 +263,7 @@ Recommended order:
 
 Do not include unrelated memories.
 
-Do not expose internal prompt text in production logs.
+Do not expose private prompt text in production logs.
 
 ## 9. Natural conversation requirements
 
@@ -307,8 +305,6 @@ Avoid:
 
 Use varied pauses with purpose.
 
-Suggested meanings:
-
 - 0.4 to 1 second: tiny conversational beat
 - 1 to 2 seconds: brief listener response
 - 2 to 4 seconds: normal reply
@@ -322,7 +318,7 @@ Do not generate a long monologue with token pauses sprinkled between paragraphs.
 
 ## 11. Performance directions
 
-Allowed directions include:
+Allowed examples:
 
 - `[soft laugh]`
 - `[quiet laugh]`
@@ -444,8 +440,6 @@ If uncertain, Kenza may say:
 
 ## 16. Candidate memory extraction
 
-After generation or playback, the app may produce candidate memories.
-
 Recommended structure:
 
 ```json
@@ -471,7 +465,7 @@ Generated fictional details introduced only for a script must not silently becom
 
 ## 17. Provider architecture
 
-Use:
+Use a provider boundary similar to:
 
 ```kotlin
 interface ScriptGenerator {
@@ -521,7 +515,7 @@ Each project should store:
 - TTS segments
 - Playback position where practical
 
-Use local storage that matches current repository complexity. A simple bounded JSON store may be acceptable for the MVP. Use Room only when querying, migration, or data volume justifies it.
+Use local storage that matches current repository complexity. A bounded JSON store may be acceptable for the MVP. Use Room only when querying, migration, or data volume justifies it.
 
 Provide deletion with confirmation.
 
@@ -544,8 +538,6 @@ The editor should support:
 Do not automatically overwrite user edits after regeneration.
 
 ## 20. Segmentation
-
-Long scripts may exceed provider text limits or become hard to edit.
 
 Segment by conversational continuity, not fixed character counts alone.
 
@@ -572,7 +564,7 @@ Support at least:
 - Recover from provider errors
 - Clean up playback resources
 
-When the provider reads bracketed directions aloud, transform them into supported pauses or remove non-spoken directions in the clean TTS version.
+When a provider reads bracketed directions aloud, transform them into supported pauses or remove non-spoken directions in the clean TTS version.
 
 Do not assume universal SSML support.
 
@@ -580,7 +572,7 @@ Before rendering or sharing, show a clear reminder that the audio is synthetic a
 
 ## 22. UI states
 
-Script generation must model explicit states such as:
+Model explicit states such as:
 
 - Idle
 - Validating
@@ -612,7 +604,7 @@ Without a provider key, the user should still be able to:
 - See duration estimation
 - Save and reopen drafts
 - Copy or export text
-- Explore the playback interface without claiming live TTS exists
+- Explore playback UI without claiming live TTS exists
 
 Demo mode must not imply that paid or configured generation occurred.
 
@@ -650,7 +642,7 @@ Add unit tests for:
 - Provider error mapping
 - Cancellation
 
-Add Compose tests where the repository supports them for:
+Add Compose tests where supported for:
 
 - Opening Script Studio
 - Creating a request
@@ -663,12 +655,12 @@ Add Compose tests where the repository supports them for:
 
 Provider tests should use fakes and fixtures. Paid API calls must remain manual integration tests.
 
-## 26. Acceptance criteria for MVP
+## 26. MVP acceptance criteria
 
 The Script Studio MVP is complete when:
 
 - It is accessible in the APK.
-- It supports 10 to 45 minute structured requests.
+- It supports structured 10 to 45 minute requests.
 - It uses shared Kenza context and relevant memory.
 - It generates or loads a one-sided Kenza script.
 - It includes varied listener pauses.
@@ -683,15 +675,15 @@ The Script Studio MVP is complete when:
 - Unit tests pass.
 - GitHub Actions produces the APK artifact.
 
-## 27. Later acceptance criteria
+## 27. Later capabilities
 
-The full feature may later add:
+Later phases may add:
 
 - Regenerate selected segment
 - Memory review, pinning, correction, and deletion UI
 - TTS rendering and playback
 - Long-script audio segmentation
-- Exported audio package
+- Exported audio packages
 - Secure Claude-backed generation through a backend
 - Pronunciation dictionaries
 - Version history
@@ -701,9 +693,9 @@ The full feature may later add:
 
 Do not claim these are complete before implementation and validation.
 
-## 28. Required production output shape
+## 28. Production output shape
 
-When a provider returns a complete script, normalize it into structured fields equivalent to:
+Normalize provider results into fields equivalent to:
 
 ```text
 CALL TITLE:
@@ -729,7 +721,7 @@ UNRESOLVED TOPICS FOR A FUTURE CALL:
 PRONUNCIATION NOTES:
 ```
 
-The app should display metadata in native UI rather than forcing the user to edit all headings inside one text block.
+Display metadata in native UI rather than forcing the user to edit all headings inside one text block.
 
 ## 29. Final quality checklist
 

@@ -46,6 +46,7 @@ fun HomeScreen(
     onSimulateIncoming: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenSchedule: () -> Unit,
+    onOpenMemory: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -62,8 +63,15 @@ fun HomeScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
+                "Memory",
+                color = IOSColors.Green,
+                fontSize = 15.sp,
+                modifier = Modifier.clickable(onClick = onOpenMemory)
+            )
+            Spacer(Modifier.width(16.dp))
+            Text(
                 "Schedule",
-                color = com.kenza.callsim.ui.theme.IOSColors.Blue,
+                color = IOSColors.Blue,
                 fontSize = 15.sp,
                 modifier = Modifier.clickable(onClick = onOpenSchedule)
             )
@@ -77,7 +85,6 @@ fun HomeScreen(
         }
         Spacer(Modifier.height(8.dp))
 
-        // Contact name or the number being typed.
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -113,7 +120,6 @@ fun HomeScreen(
 
         Spacer(Modifier.height(20.dp))
 
-        // [ empty ] [ green call ] [ backspace ]
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -152,7 +158,6 @@ fun HomeScreen(
 
         Spacer(Modifier.height(1.dp).weight(1f))
 
-        // Test helper: ring the phone as if the contact were calling you.
         Row(
             modifier = Modifier
                 .clip(CircleShape)

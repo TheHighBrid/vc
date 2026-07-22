@@ -84,22 +84,22 @@ fun SettingsScreen(
         Spacer(Modifier.height(20.dp))
 
         // ---- Provider switch ----
-        Text("Voice provider", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+        Text("Voice engine", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium)
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            ProviderChip("Gemini — free", provider == ProviderType.GEMINI, Modifier.weight(1f)) {
+            ProviderChip("Gemini · Daily", provider == ProviderType.GEMINI, Modifier.weight(1f)) {
                 provider = ProviderType.GEMINI
             }
-            ProviderChip("ElevenLabs — premium", provider == ProviderType.ELEVENLABS, Modifier.weight(1f)) {
+            ProviderChip("ElevenLabs · Optional", provider == ProviderType.ELEVENLABS, Modifier.weight(1f)) {
                 provider = ProviderType.ELEVENLABS
             }
         }
         Spacer(Modifier.height(6.dp))
         Text(
             if (provider == ProviderType.GEMINI)
-                "Realistic live voice on a generous free tier. Uses a preset voice (not cloned)."
+                "Recommended for everyday calls: free-tier live voice, low latency, full personality, and automatic post-call memory summaries."
             else
-                "Speaks in Kenza's cloned voice, but is quota-limited (paid after a few minutes).",
+                "Optional compatibility mode for a cloned voice. It is paid and quota-limited, so it is not the recommended daily engine.",
             color = IOSColors.SecondaryLabel, fontSize = 12.sp
         )
 
@@ -108,7 +108,7 @@ fun SettingsScreen(
         if (provider == ProviderType.GEMINI) {
             Field("Gemini API key", geminiKey, { geminiKey = it },
                 "Get a free key at aistudio.google.com/apikey",
-                "Required. Free tier covers live voice for testing.")
+                "Required for daily live calls and automatic post-call memory summaries.")
             Text("Voice", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium)
             Spacer(Modifier.height(8.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -125,19 +125,22 @@ fun SettingsScreen(
             Spacer(Modifier.height(8.dp))
             Field("Model (advanced)", geminiModel, { geminiModel = it },
                 "gemini-3.1-flash-live-preview",
-                "Default is the fast low-latency model. For a warmer (but slower) voice, try " +
-                    "gemini-2.5-flash-native-audio-preview-12-2025.")
+                "The default model prioritizes fast turn-taking. Only change this when testing another supported Gemini Live model.")
         } else {
+            Text(
+                "ElevenLabs is retained for versatility only. Gemini remains the primary daily engine and the source used for memory extraction.",
+                color = IOSColors.SecondaryLabel,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
             Field("Agent ID", agentId, { agentId = it },
                 "ElevenLabs Conversational AI agent id",
-                "Required. Create an agent at elevenlabs.io with Kenza's voice.")
+                "Only required when you deliberately choose the optional ElevenLabs engine.")
             Field("ElevenLabs API key (optional)", elevenKey, { elevenKey = it },
                 "Only for a PRIVATE agent", "Leave blank if your agent is public.")
-            Field("Backup keys — auto failover", backups, { backups = it },
+            Field("Backup keys — optional failover", backups, { backups = it },
                 "agentId, apiKey\nagentId, apiKey",
-                "One account per line — press Enter for a new line to add a 3rd, 4th, etc. " +
-                    "When a key runs out of credit the call auto-switches to the next line. Each " +
-                    "ElevenLabs account has its own agent, so include both its agent ID and key.",
+                "Optional ElevenLabs-only failover. This is not used during normal Gemini calls.",
                 singleLine = false)
             Spacer(Modifier.height(4.dp))
             Text("Voice ID: ${voiceId.ifEmpty { "—" }}", color = IOSColors.SecondaryLabel, fontSize = 12.sp)
@@ -146,8 +149,7 @@ fun SettingsScreen(
                 Column(Modifier.weight(1f)) {
                     Text("Send persona + memory to ElevenLabs", color = Color.White, fontSize = 15.sp)
                     Text(
-                        "Gives the ElevenLabs voice the same memory & personality. FIRST enable " +
-                            "Security → Overrides → System prompt on your agent, or calls will fail.",
+                        "Optional ElevenLabs-only setting. Enable Security → Overrides → System prompt on that agent first.",
                         color = IOSColors.SecondaryLabel, fontSize = 12.sp
                     )
                 }
@@ -158,7 +160,7 @@ fun SettingsScreen(
         Spacer(Modifier.height(12.dp))
         Field("Contact name", contactName, { contactName = it }, "Kenza", "Shown on the call screen.")
         Field("Personality (system prompt)", persona, { persona = it },
-            "How she should talk", "Used by whichever provider is active.")
+            "How she should talk", "Loaded with Kenza's encrypted memory before every call.")
 
         Spacer(Modifier.height(24.dp))
         Button(
